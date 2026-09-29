@@ -10,14 +10,26 @@ tasks:
     cmds:
       - task --list
 
+  install:
+    desc: Install npm dependencies
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules/.package-lock.json
+    cmds:
+      - npm install
+
   dev:
     desc: Run the app locally (Vite + Tauri)
+    deps: [install]
     interactive: true
     cmds:
       - npm run tauri dev
 
   dev:logs:
     desc: Run the app locally with engine debug logs
+    deps: [install]
     interactive: true
     env:
       RUST_LOG: screenbound_lib=debug
@@ -26,6 +38,7 @@ tasks:
 
   check:
     desc: Frontend type check
+    deps: [install]
     cmds:
       - npm run check
 
@@ -64,6 +77,7 @@ tasks:
   release:
     aliases: [build]
     desc: Production build and Windows installer
+    deps: [install]
     cmds:
       - npm run tauri build
 

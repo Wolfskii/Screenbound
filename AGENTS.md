@@ -47,6 +47,7 @@ recorded in PLAN.md / [docs/fullscreen-research.md](docs/fullscreen-research.md)
 
 | Task | Command |
 | --- | --- |
+| Install npm dependencies | `task install` |
 | Run app (dev) | `task dev` |
 | Verbose logs | `task dev:logs` |
 | Rust unit tests | `task test` |
