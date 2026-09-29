@@ -13,9 +13,9 @@ public static class SbProbe {
 $h = (Get-Process -Id $ProcessId).MainWindowHandle
 if ($h -eq [IntPtr]::Zero) { throw "no main window for pid $ProcessId" }
 function Show($label) {
-  $r = New-Object SbProbe+RECT; [void][SbProbe]::GetWindowRect($h, [ref]$r)
-  $style = [SbProbe]::GetWindowLongPtr($h, -16).ToInt64()
-  "{0,-10} ({1},{2}) {3}x{4} style=0x{5:X8}" -f $label, $r.L, $r.T, ($r.R - $r.L), ($r.B - $r.T), $style
+    $r = New-Object SbProbe+RECT; [void][SbProbe]::GetWindowRect($h, [ref]$r)
+    $style = [SbProbe]::GetWindowLongPtr($h, -16).ToInt64()
+    "{0,-10} ({1},{2}) {3}x{4} style=0x{5:X8}" -f $label, $r.L, $r.T, ($r.R - $r.L), ($r.B - $r.T), $style
 }
 Show "before"
 $r0 = New-Object SbProbe+RECT; [void][SbProbe]::GetWindowRect($h, [ref]$r0)

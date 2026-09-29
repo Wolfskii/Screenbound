@@ -3,7 +3,9 @@
 Record observed behavior here. Mark each entry with how it was verified.
 
 ## Chromium (Chrome, Edge, Electron) — source + observed
+
 Source: `ui/views/win/fullscreen_handler.cc`, `ui/views/win/hwnd_message_handler.cc`.
+
 - Fullscreen reuses the same top-level HWND (`Chrome_WidgetWin_1`). On enter it saves style/rect/
   maximized, strips `WS_CAPTION | WS_THICKFRAME` and edge ex-styles, and `SetWindowPos`es to the
   monitor rect. On exit it restores its saved state itself.
@@ -18,15 +20,18 @@ Source: `ui/views/win/fullscreen_handler.cc`, `ui/views/win/hwnd_message_handler
 - `ITaskbarList2::MarkFullscreenWindow` is used to hide the taskbar.
 
 ## Firefox — not yet verified
+
 Expected: `MozillaWindowClass`, same-HWND fullscreen with chrome hidden. Also see pref
 `full-screen-api.ignore-widgets` (content-only fullscreen inside the window) as a fallback.
 
 ## Detection heuristic (core/fullscreen.rs)
+
 Visible, not cloaked, normal show state, no caption, no thick frame, window rect ⊇ monitor rect.
 Excludes shell windows (`Progman`, `WorkerW`, `Shell_TrayWnd`, `Shell_SecondaryTrayWnd`) — the
 desktop matches the geometric heuristic otherwise (observed).
 
 ## Fullscreen kinds
+
 | Kind | Controllable | Notes |
 | --- | --- | --- |
 | Borderless / window fullscreen (browsers, most players, many games) | Yes | Target of the MVP |

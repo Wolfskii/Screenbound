@@ -3,10 +3,12 @@
 Read this and [PLAN.md](PLAN.md) before changing code. PLAN.md is the source of truth for status.
 
 ## What ScreenBound is
+
 A native window-behavior manager. MVP: when a window enters fullscreen, constrain the *real native
 window* to a user-defined zone of the monitor. Not browser PiP, not an overlay, not fake fullscreen.
 
 ## Architecture (keep these boundaries)
+
 ```
 Svelte UI (src/)              config, visualization, diagnostics — no window logic
   │ invoke / events (src/lib/api.ts)
@@ -17,6 +19,7 @@ Engine (src-tauri/src/engine/)               state machine: detect, apply, resto
 Core (src-tauri/src/core/)                   pure logic: geometry, zones, rules, heuristics, config
 Platform (src-tauri/src/platform/windows/)   Win32 only: monitors, window state/styles, WinEvent hooks
 ```
+
 - `core/` must never call native APIs. Anything decidable from data belongs here, with unit tests.
 - Platform-specific code lives only under `platform/<os>/`. No `cfg(windows)` in core or engine.
 - The engine is single-threaded and owns its state; talk to it through `EngineHandle`.
@@ -24,6 +27,7 @@ Platform (src-tauri/src/platform/windows/)   Win32 only: monitors, window state/
   A native workaround is acceptable only when generic (e.g. `SWP_NOSENDCHANGING`) and documented.
 
 ## Native rules
+
 - Event-driven only (WinEvent hooks + display broadcasts). No periodic polling of windows.
 - Physical pixels everywhere (process is Per-Monitor-V2 DPI aware). Never assume monitor origin,
   ordering, sign of coordinates, equal DPI, or that fullscreen means the primary monitor.
@@ -32,11 +36,13 @@ Platform (src-tauri/src/platform/windows/)   Win32 only: monitors, window state/
 - Never modify a window you cannot re-validate (pid + process start time).
 
 ## Done means tested on real Windows
+
 A feature is not "done" because it compiles or has unit tests. Native behavior must be exercised
 against real applications (see [docs/manual-testing.md](docs/manual-testing.md)) and findings
 recorded in PLAN.md / [docs/fullscreen-research.md](docs/fullscreen-research.md).
 
 ## Commands
+
 | Task | Command |
 | --- | --- |
 | Run app (dev) | `npm run tauri dev` |
@@ -51,6 +57,7 @@ recorded in PLAN.md / [docs/fullscreen-research.md](docs/fullscreen-research.md)
 prints how its bounds evolve — useful for checking whether an app vetoes external resizes.
 
 ## Conventions
+
 - Rust: `cargo clippy` clean, serde `camelCase` for anything crossing to the UI.
 - TS types in `src/lib/types.ts` mirror the Rust serde types — update both together.
 - Config lives in `%APPDATA%\com.screenbound.app\config.json`; journal in `managed-windows.json`.

@@ -19,13 +19,15 @@ Legend: ✅ verified on real Windows · 🧪 implemented, unit-tested, awaiting 
 | 9 | Hardening & manual test matrix | ⬜ see [docs/manual-testing.md](docs/manual-testing.md) |
 
 ## MVP definition-of-done tracker
+
 1. Starts ✅ · 2. Monitors detected ✅ (single) · 3. Geometry displayed 🧪 · 4. Custom zone 🧪 ·
-5. Chrome ⬜ · 6. Edge ✅ · 7. Firefox ⬜ · 8. Native window identified ✅ · 9. State captured ✅ ·
-10. Constrained to zone ✅ · 11. Borderless 🧪 · 12/13. Title-bar toggle, default off 🧪 ·
-14. Exit restores ⬜ · 15. Multi-monitor ⬜ · 16. Diagnostics 🧪 · 17. Low idle CPU 🧪 (no polling
+2. Chrome ⬜ · 6. Edge ✅ · 7. Firefox ⬜ · 8. Native window identified ✅ · 9. State captured ✅ ·
+3. Constrained to zone ✅ · 11. Borderless 🧪 · 12/13. Title-bar toggle, default off 🧪 ·
+4. Exit restores ⬜ · 15. Multi-monitor ⬜ · 16. Diagnostics 🧪 · 17. Low idle CPU 🧪 (no polling
 by design; measure) · 18. Generic structure ✅
 
 ## Design decisions (and deviations from the original brief)
+
 - **Chrome mode semantics.** `Keep` = don't touch native styles (default); `Hide` = strip
   `WS_CAPTION | WS_THICKFRAME` + edge ex-styles. Browsers already drop their chrome in fullscreen,
   so `Keep` still looks borderless for them; the option matters for apps that keep a frame.
@@ -52,6 +54,7 @@ by design; measure) · 18. Generic structure ✅
   invisible-border insets so there is no gap.
 
 ## Known limitations / open questions
+
 - Exclusive (DXGI/D3D) fullscreen can't be constrained with window APIs. Detect & report only.
 - Elevated windows can't be modified from an unelevated ScreenBound (UIPI) → logged as access denied.
 - Chromium marks fullscreen windows via `ITaskbarList2::MarkFullscreenWindow`; taskbar may stay
@@ -64,6 +67,7 @@ by design; measure) · 18. Generic structure ✅
 - Hard kill of ScreenBound (e.g. killing `tauri dev`) skips exit restore; journal recovers on next start.
 
 ## Next steps
+
 1. Manual matrix for Chrome, Firefox, HTML5 video fullscreen (YouTube), exit via Esc/F11.
 2. Multi-monitor + negative coordinates + mixed DPI.
 3. Measure idle CPU; review `EVENT_OBJECT_LOCATIONCHANGE` volume.
