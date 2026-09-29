@@ -1,0 +1,74 @@
+version: "3"
+
+# Windows desktop app. `dev` is the local loop; `release` builds the installer;
+# `deploy` installs that build for the current user.
+
+tasks:
+  default:
+    desc: List tasks
+    silent: true
+    cmds:
+      - task --list
+
+  dev:
+    desc: Run the app locally (Vite + Tauri)
+    interactive: true
+    cmds:
+      - npm run tauri dev
+
+  dev:logs:
+    desc: Run the app locally with engine debug logs
+    interactive: true
+    env:
+      RUST_LOG: screenbound_lib=debug
+    cmds:
+      - npm run tauri dev
+
+  check:
+    desc: Frontend type check
+    cmds:
+      - npm run check
+
+  test:
+    desc: Rust unit tests
+    dir: src-tauri
+    cmds:
+      - cargo test
+
+  probe:
+    desc: Read-only probe of real monitors and windows
+    dir: src-tauri
+    cmds:
+      - cargo test -- --ignored --nocapture
+
+  probe:resize:
+    desc: Resize one window and print how its bounds change (PID=)
+    requires:
+      vars: [PID]
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/probe-resize.ps1 -ProcessId {{.PID}}{{if .NOSEND}} -NoSendChanging{{end}}
+
+  lint:
+    desc: Clippy on all Rust targets
+    dir: src-tauri
+    cmds:
+      - cargo clippy --all-targets
+
+  ci:
+    desc: Typecheck, unit tests, and clippy
+    cmds:
+      - task: check
+      - task: test
+      - task: lint
+
+  release:
+    aliases: [build]
+    desc: Production build and Windows installer
+    cmds:
+      - npm run tauri build
+
+  deploy:
+    desc: Build the release installer and install it for the current user
+    cmds:
+      - task: release
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "$setup = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if (-not $setup) { throw 'NSIS installer not found under src-tauri/target/release/bundle/nsis' }; Write-Host ('Installing ' + $setup.FullName); $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru; if ($p.ExitCode -ne 0) { exit $p.ExitCode }"

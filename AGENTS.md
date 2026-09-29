@@ -43,15 +43,20 @@ recorded in PLAN.md / [docs/fullscreen-research.md](docs/fullscreen-research.md)
 
 ## Commands
 
+[Task](https://taskfile.dev) (`Taskfile.yml`). `task --list` prints these.
+
 | Task | Command |
 | --- | --- |
-| Run app (dev) | `npm run tauri dev` |
-| Rust unit tests | `cd src-tauri; cargo test` |
-| Desktop probe (read-only, real monitors/windows) | `cd src-tauri; cargo test -- --ignored --nocapture` |
-| Lint | `cd src-tauri; cargo clippy --all-targets` |
-| Frontend type check | `npm run check` |
-| Release build | `npm run tauri build` |
-| Verbose logs | `$env:RUST_LOG="screenbound_lib=debug"; npm run tauri dev` |
+| Run app (dev) | `task dev` |
+| Verbose logs | `task dev:logs` |
+| Rust unit tests | `task test` |
+| Desktop probe (read-only, real monitors/windows) | `task probe` |
+| Resize one window and print bounds | `task probe:resize PID=<pid>` |
+| Lint | `task lint` |
+| Frontend type check | `task check` |
+| Typecheck, test, and lint | `task ci` |
+| Release build | `task release` |
+| Install that release for the current user | `task deploy` |
 
 `scripts/probe-resize.ps1 -ProcessId <pid> [-NoSendChanging]` resizes one process's main window and
 prints how its bounds evolve — useful for checking whether an app vetoes external resizes.

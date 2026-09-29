@@ -1,6 +1,6 @@
 # Manual test procedures
 
-Run with `npm run tauri dev` and keep the **Diagnostics** tab open. For isolated browser tests use a
+Run with `task dev` and keep the **Diagnostics** tab open. For isolated browser tests use a
 throwaway profile so your real session is untouched, e.g.
 `msedge.exe --user-data-dir=%TEMP%\sb-test --no-first-run https://www.youtube.com`.
 

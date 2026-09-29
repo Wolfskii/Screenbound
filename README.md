@@ -8,12 +8,14 @@ Discord lives in the remaining 25%. Windows first; built with Tauri 2, Svelte 5 
 
 ## Getting started
 
-Prerequisites: Rust (stable, MSVC), Node 20+, WebView2 (preinstalled on Windows 11).
+Prerequisites: Rust (stable, MSVC), Node 20+, [Task](https://taskfile.dev), WebView2 (preinstalled on Windows 11).
 
 ```powershell
 npm install
-npm run tauri dev
+task dev
 ```
+
+`task --list` shows the rest (`task test`, `task release`, `task deploy`, …).
 
 Defaults: zone "75% Left", rule "Browsers" (chrome.exe, msedge.exe, firefox.exe, librewolf.exe).
 
