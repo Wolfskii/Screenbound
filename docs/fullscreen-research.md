@@ -19,10 +19,18 @@ Source: `ui/views/win/fullscreen_handler.cc`, `ui/views/win/hwnd_message_handler
   **Observed:** 1920×1199 after ScreenBound released the window while a terminal had focus.
 - `ITaskbarList2::MarkFullscreenWindow` is used to hide the taskbar.
 
-## Firefox — not yet verified
+## Firefox / LibreWolf — observed 2026-09
 
-Expected: `MozillaWindowClass`, same-HWND fullscreen with chrome hidden. Also see pref
-`full-screen-api.ignore-widgets` (content-only fullscreen inside the window) as a fallback.
+Same top-level `MozillaWindowClass` HWND for HTML5 fullscreen (YouTube in LibreWolf). Constraining
+the window works. The taskbar stays painted over the zone until the video is clicked: the shell
+only drops the taskbar below a window that no longer covers the monitor when that window is
+activated, and our `SetWindowPos` does not activate. While managed, the window is raised
+`HWND_TOPMOST` and re-marked with `ITaskbarList2::MarkFullscreenWindow`, then the shell is nudged
+with `HSHELL_RUDEAPPACTIVATED` so it does not wait for a click. Topmost is cleared on release.
+
+Exiting fullscreen restored a smaller window than before the click. `InfallibleMakeFullScreen`
+caches `GetScreenBounds()` on every fullscreen entry, so a resize while fullscreen replaces the
+rect Firefox puts back. On exit we restore the last framed or maximized window we observed.
 
 ## Detection heuristic (core/fullscreen.rs)
 

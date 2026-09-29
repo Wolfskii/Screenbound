@@ -28,6 +28,16 @@ pub fn is_fullscreen_like(state: &WindowState, monitors: &[MonitorInfo]) -> bool
     fullscreen_monitor(state, monitors).is_some()
 }
 
+/// A window the user was actually looking at, as opposed to a borderless in-between rect
+/// Firefox and Chromium pass through while entering fullscreen. Those transients are smaller
+/// than the pre-fullscreen window and must not be what we restore on exit.
+pub fn is_resting_layout(state: &WindowState) -> bool {
+    state.visible
+        && !state.cloaked
+        && state.show_state != ShowState::Minimized
+        && (state.has_title_bar || state.show_state == ShowState::Maximized)
+}
+
 /// Chromium shrinks a background fullscreen window by 1px so the taskbar stops treating it as
 /// fullscreen; for windows we already manage, that still means "the app wants fullscreen".
 const NEAR_FULLSCREEN_TOLERANCE: i32 = 2;
@@ -123,6 +133,21 @@ mod tests {
         assert_eq!(fullscreen_monitor(&s, &ms).unwrap().id.0, "main");
         let s = test_state(Rect::new(-1920, 0, 0, 1080));
         assert_eq!(fullscreen_monitor(&s, &ms).unwrap().id.0, "side");
+    }
+
+    #[test]
+    fn resting_layout_ignores_borderless_transition() {
+        let mut framed = test_state(Rect::new(100, 100, 1400, 900));
+        framed.has_title_bar = true;
+        framed.has_resize_frame = true;
+        assert!(is_resting_layout(&framed));
+
+        let mut maximized = framed.clone();
+        maximized.show_state = ShowState::Maximized;
+        assert!(is_resting_layout(&maximized));
+
+        let entering = test_state(Rect::new(100, 100, 400, 300));
+        assert!(!is_resting_layout(&entering));
     }
 
     #[test]

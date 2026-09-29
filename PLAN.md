@@ -43,8 +43,8 @@ by design; measure) · 18. Generic structure ✅
 - **Loop guard.** >4 re-asserts in 3 s → stop fighting, log, show "app refused" in diagnostics.
 - **Detected vs pre-fullscreen state.** We hand back the *app's own fullscreen state* when we let go
   while the app is still fullscreen (exit, disable, crash recovery). When the app exits fullscreen
-  itself it restores its own pre-fullscreen state; we only undo style bits we changed that the app
-  left untouched.
+  itself we put back the last framed (or maximized) window we saw. Firefox rewrites its saved
+  restore rect when the fullscreen window is resized, so trusting the app comes back smaller.
 - **Crash safety.** Every change is journaled (`managed-windows.json`, atomic write). On start,
   entries whose window still exists, belongs to the same process (pid + start time) and is still at
   our applied bounds are restored. Panics inside the engine are caught per message.
@@ -58,7 +58,12 @@ by design; measure) · 18. Generic structure ✅
 - Exclusive (DXGI/D3D) fullscreen can't be constrained with window APIs. Detect & report only.
 - Elevated windows can't be modified from an unelevated ScreenBound (UIPI) → logged as access denied.
 - Chromium marks fullscreen windows via `ITaskbarList2::MarkFullscreenWindow`; taskbar may stay
-  hidden while the constrained window is active. Candidate fix: call `MarkFullscreenWindow(hwnd, FALSE)`.
+  hidden while the constrained window is active.
+- LibreWolf/Firefox HTML5 fullscreen (YouTube, 2026-09): after the zone resize the taskbar stayed
+  painted over the window until the video was clicked. Constrained windows are now raised above
+  the taskbar and re-marked fullscreen immediately. Exiting fullscreen also restored a smaller
+  window than before the click; we now put back the last framed window ourselves. 🧪 confirm both
+  on LibreWolf.
 - Chromium's background-fullscreen hack shrinks the window by 1 px when another window on the same
   monitor activates, and restores monitor bounds when it re-activates. Treated as "re-fullscreen" and
   re-applied; needs real testing for flicker.

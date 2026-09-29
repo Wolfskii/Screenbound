@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use windows::Win32::Foundation::{GetLastError, ERROR_ACCESS_DENIED, RECT};
+use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, SetThreadDpiAwarenessContext,
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
@@ -28,6 +29,11 @@ pub fn init_process() {
 pub(crate) fn set_thread_dpi_aware() {
     unsafe {
         let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        // MarkFullscreenWindow needs an STA. S_FALSE means this thread already initialized COM.
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        if hr.is_err() {
+            tracing::warn!("CoInitializeEx failed: {hr}");
+        }
     }
 }
 
@@ -91,6 +97,14 @@ impl PlatformWindowManager for WindowsPlatform {
 
     fn restore_state(&self, id: WindowId, state: &WindowState) -> PlatformResult<()> {
         window::restore_state(id, state)
+    }
+
+    fn set_topmost(&self, id: WindowId, topmost: bool) -> PlatformResult<()> {
+        window::set_topmost(id, topmost)
+    }
+
+    fn set_hides_taskbar(&self, id: WindowId, hide: bool) -> PlatformResult<()> {
+        window::set_hides_taskbar(id, hide)
     }
 
     fn subscribe(&self, sink: EventSink) -> PlatformResult<EventSubscription> {

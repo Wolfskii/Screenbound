@@ -86,6 +86,13 @@ pub trait PlatformWindowManager: Send + Sync {
     /// Restores styles, bounds and show state from a snapshot.
     fn restore_state(&self, window: WindowId, state: &WindowState) -> PlatformResult<()>;
 
+    /// Inserts the window at the top (or back out) of the topmost z-order band.
+    fn set_topmost(&self, window: WindowId, topmost: bool) -> PlatformResult<()>;
+
+    /// Asks the shell to treat `window` as fullscreen, which drops the taskbar below it
+    /// while it is active. `hide == false` clears that mark.
+    fn set_hides_taskbar(&self, window: WindowId, hide: bool) -> PlatformResult<()>;
+
     fn subscribe(&self, sink: EventSink) -> PlatformResult<EventSubscription>;
 }
 

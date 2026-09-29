@@ -36,6 +36,12 @@ impl PlatformWindowManager for UnsupportedPlatform {
     fn restore_state(&self, _: WindowId, _: &WindowState) -> PlatformResult<()> {
         Err(PlatformError::Unsupported)
     }
+    fn set_topmost(&self, _: WindowId, _: bool) -> PlatformResult<()> {
+        Err(PlatformError::Unsupported)
+    }
+    fn set_hides_taskbar(&self, _: WindowId, _: bool) -> PlatformResult<()> {
+        Err(PlatformError::Unsupported)
+    }
     fn subscribe(&self, _: EventSink) -> PlatformResult<EventSubscription> {
         Err(PlatformError::Unsupported)
     }

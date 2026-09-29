@@ -15,12 +15,13 @@ use serde::Serialize;
 
 use crate::core::config::{AppConfig, ConfigError};
 use crate::core::fullscreen::{
-    classify_managed, compensate_invisible_frame, fullscreen_monitor, ManagedObservation, BOUNDS_TOLERANCE,
+    classify_managed, compensate_invisible_frame, fullscreen_monitor, is_resting_layout, ManagedObservation,
+    BOUNDS_TOLERANCE,
 };
 use crate::core::geometry::Rect;
 use crate::core::monitor::{monitor_for_rect, MonitorId, MonitorInfo};
 use crate::core::rules::first_match;
-use crate::core::window::{ChromeMode, ShowState, WindowId, WindowIdentity, WindowInfo, WindowState};
+use crate::core::window::{ChromeMode, WindowId, WindowIdentity, WindowInfo, WindowState};
 use crate::platform::{PlatformError, PlatformEvent, PlatformWindowManager};
 use activity::{ActivityEntry, ActivityLevel, ActivityLog};
 use journal::JournalEntry;
@@ -187,7 +188,12 @@ impl Engine {
             }
             let who = Some(format!("{} {}", entry.process_name, entry.window));
             match self.platform.restore_state(entry.window, &entry.detected) {
-                Ok(()) => self.log(ActivityLevel::Info, who, "Restored window left constrained by a previous session".into()),
+                Ok(()) => {
+                    if let Err(e) = self.platform.set_hides_taskbar(entry.window, true) {
+                        tracing::warn!(window = %entry.window, "could not mark recovered fullscreen window: {e}");
+                    }
+                    self.log(ActivityLevel::Info, who, "Restored window left constrained by a previous session".into());
+                }
                 Err(e) => self.log(ActivityLevel::Warn, who, format!("Could not restore window from previous session: {e}")),
             }
         }
@@ -273,7 +279,9 @@ impl Engine {
             Some(_) => {}
             None => {
                 self.rejected.remove(&id);
-                if state.visible && !state.cloaked && state.show_state != ShowState::Minimized {
+                // Skip borderless frames seen while entering fullscreen; those are smaller than
+                // the window the user had, and Firefox restores whatever it last observed.
+                if is_resting_layout(&state) {
                     self.last_normal.insert(id, state);
                 }
             }
@@ -355,6 +363,9 @@ impl Engine {
                 after.visible_bounds
             ));
         }
+        // Resize alone leaves the taskbar painted over the zone until the window is clicked.
+        self.cover_taskbar(m.id);
+        let after = self.platform.state(m.id).unwrap_or(after);
         let summary = format!(
             "Constrained to zone '{}' on {}: {} → {}",
             zone.name, monitor.friendly_name, before.bounds, after.bounds
@@ -363,6 +374,26 @@ impl Engine {
         m.target = target;
         m.monitor = Some(monitor.id.clone());
         Ok(summary)
+    }
+
+    /// Zone windows no longer cover the monitor, so the shell draws the taskbar on top of them
+    /// until something activates the window. Raise the window and mark it fullscreen now.
+    fn cover_taskbar(&self, id: WindowId) {
+        if let Err(e) = self.platform.set_topmost(id, true) {
+            tracing::warn!(window = %id, "could not raise window above the taskbar: {e}");
+        }
+        if let Err(e) = self.platform.set_hides_taskbar(id, true) {
+            tracing::warn!(window = %id, "could not mark window fullscreen for the taskbar: {e}");
+        }
+    }
+
+    fn restore_taskbar(&self, id: WindowId, topmost: bool) {
+        if let Err(e) = self.platform.set_topmost(id, topmost) {
+            tracing::warn!(window = %id, "could not restore topmost: {e}");
+        }
+        if let Err(e) = self.platform.set_hides_taskbar(id, false) {
+            tracing::warn!(window = %id, "could not clear taskbar fullscreen mark: {e}");
+        }
     }
 
     fn evaluate_managed(&mut self, id: WindowId) {
@@ -421,25 +452,38 @@ impl Engine {
         (self.notify)(Notification::ManagedChanged);
     }
 
-    /// The app left fullscreen on its own and restored its own bounds. Only undo style changes
-    /// that are still exactly as we left them (i.e. the app did not restore styles itself).
+    /// The app left fullscreen. Firefox overwrites its saved restore rect when we resize the
+    /// fullscreen window, so exiting comes back smaller than the window the user had. Put that
+    /// window back ourselves.
     fn release_after_exit(&mut self, id: WindowId, current: WindowState) {
         let Some(m) = self.managed.remove(&id) else { return };
         let who = label(&m.identity, id);
-        if current.style == m.applied.style && m.applied.style != m.detected.style {
-            let style = m.pre_fullscreen.as_ref().map_or(m.detected.style, |p| p.style);
-            if let Err(e) = self.platform.set_style(id, style) {
-                self.log(ActivityLevel::Warn, Some(who.clone()), format!("Could not restore window styles: {e}"));
+        if let Some(pre) = m.pre_fullscreen.clone() {
+            match self.platform.restore_state(id, &pre) {
+                Ok(()) => {
+                    tracing::info!(
+                        window = %who,
+                        app_left_at = %current.bounds,
+                        restored = %pre.bounds,
+                        "fullscreen exited"
+                    );
+                    self.log(ActivityLevel::Info, Some(who), format!("Fullscreen exited; restored {}", pre.bounds));
+                }
+                Err(e) => {
+                    self.log(ActivityLevel::Warn, Some(who), format!("Fullscreen exited but could not restore: {e}"));
+                }
             }
+            if let Err(e) = self.platform.set_hides_taskbar(id, false) {
+                tracing::warn!(window = %id, "could not clear taskbar fullscreen mark: {e}");
+            }
+            self.last_normal.insert(id, pre);
+        } else {
+            let topmost = m.detected.topmost;
+            self.restore_taskbar(id, topmost);
+            tracing::info!(window = %who, bounds = %current.bounds, "fullscreen exited without a saved window");
+            self.log(ActivityLevel::Info, Some(who), format!("Fullscreen exited; released at {}", current.bounds));
+            self.last_normal.insert(id, current);
         }
-        tracing::info!(
-            window = %who,
-            bounds = %current.bounds,
-            pre_fullscreen = ?m.pre_fullscreen.as_ref().map(|s| s.bounds.to_string()),
-            "fullscreen exited"
-        );
-        self.log(ActivityLevel::Info, Some(who), format!("Fullscreen exited; released at {}", current.bounds));
-        self.last_normal.insert(id, current);
         self.save_journal();
         (self.notify)(Notification::ManagedChanged);
     }
@@ -461,7 +505,12 @@ impl Engine {
                 "restoring window"
             );
             match self.platform.restore_state(id, &m.detected) {
-                Ok(()) => self.log(ActivityLevel::Info, Some(who), format!("Released ({reason:?}); restored {}", m.detected.bounds)),
+                Ok(()) => {
+                    if let Err(e) = self.platform.set_hides_taskbar(id, true) {
+                        tracing::warn!(window = %id, "could not mark released fullscreen window: {e}");
+                    }
+                    self.log(ActivityLevel::Info, Some(who), format!("Released ({reason:?}); restored {}", m.detected.bounds));
+                }
                 Err(e) => self.log(ActivityLevel::Warn, Some(who), format!("Release ({reason:?}) could not restore: {e}")),
             }
         }

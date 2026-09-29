@@ -1,21 +1,27 @@
 use std::ffi::c_void;
 
 use windows::core::{BOOL, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, SetLastError, FILETIME, HWND, LPARAM, RECT, WIN32_ERROR};
+use windows::Win32::Foundation::{CloseHandle, SetLastError, FILETIME, HWND, LPARAM, RECT, WIN32_ERROR, WPARAM};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
 use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONULL};
+use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+use windows::Win32::System::StationsAndDesktops::{
+    BroadcastSystemMessageW, BROADCAST_SYSTEM_MESSAGE_FLAGS, BSF_IGNORECURRENTTASK, BSF_POSTMESSAGE,
+    BSM_APPLICATIONS,
+};
 use windows::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::UI::Shell::{ITaskbarList2, TaskbarList};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindow, GetWindowLongPtrW, GetWindowPlacement, GetWindowRect,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsHungAppWindow, IsIconic,
     IsWindow, IsWindowVisible, IsZoomed, SetWindowLongPtrW, SetWindowPlacement, SetWindowPos,
-    ShowWindow, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, SET_WINDOW_POS_FLAGS, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSENDCHANGING, SWP_NOSIZE, SWP_NOZORDER,
-    SW_MAXIMIZE,
+    RegisterWindowMessageW, ShowWindow, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_NOTOPMOST, HWND_TOPMOST,
+    HSHELL_HIGHBIT, HSHELL_WINDOWACTIVATED, SET_WINDOW_POS_FLAGS, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSENDCHANGING, SWP_NOSIZE, SWP_NOZORDER, SW_MAXIMIZE,
     SW_SHOWNOACTIVATE, WINDOWPLACEMENT, WINDOW_EX_STYLE, WINDOW_STYLE, WS_CAPTION,
     WS_EX_CLIENTEDGE, WS_EX_DLGMODALFRAME, WS_EX_STATICEDGE, WS_EX_TOPMOST, WS_EX_WINDOWEDGE,
     WS_MAXIMIZE, WS_MINIMIZE, WS_THICKFRAME, WS_VISIBLE,
@@ -256,6 +262,62 @@ pub(super) fn set_bounds(id: WindowId, bounds: Rect) -> PlatformResult<()> {
     set_window_pos(id, h, bounds, SWP_FRAMECHANGED | SWP_NOSENDCHANGING)
 }
 
+/// The shell keeps the taskbar above a window that no longer covers the monitor until that
+/// window is activated — a click. Topmost puts the zone over the taskbar immediately, and
+/// keeps it there when focus moves to the rest of the screen.
+pub(super) fn set_topmost(id: WindowId, topmost: bool) -> PlatformResult<()> {
+    let h = ensure_responsive(id)?;
+    let insert_after = if topmost { HWND_TOPMOST } else { HWND_NOTOPMOST };
+    // NOZORDER would ignore insert-after. NOSENDCHANGING so a fullscreen handler cannot
+    // rewrite the zone rect while only z-order is changing.
+    let flags = SET_WINDOW_POS_FLAGS(
+        SWP_NOMOVE.0 | SWP_NOSIZE.0 | SWP_NOACTIVATE.0 | SWP_NOSENDCHANGING.0 | SWP_NOOWNERZORDER.0,
+    );
+    unsafe { SetWindowPos(h, Some(insert_after), 0, 0, 0, 0, flags) }
+        .map_err(|e| window_error(id, "SetWindowPos(z-order)", e))
+}
+
+/// `ITaskbarList2::MarkFullscreenWindow` moves the taskbar to the bottom of the z-order while
+/// this window is active. The shell only applies that on an activation, so nudge it explicitly
+/// — otherwise the taskbar stays painted over the zone until the user clicks the window.
+pub(super) fn set_hides_taskbar(id: WindowId, hide: bool) -> PlatformResult<()> {
+    let h = ensure_responsive(id)?;
+    unsafe {
+        let taskbar: ITaskbarList2 = CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER)
+            .map_err(|e| window_error(id, "CoCreateInstance(TaskbarList)", e))?;
+        taskbar.HrInit().map_err(|e| window_error(id, "ITaskbarList::HrInit", e))?;
+        taskbar
+            .MarkFullscreenWindow(h, hide)
+            .map_err(|e| window_error(id, "MarkFullscreenWindow", e))?;
+    }
+    nudge_shell_taskbar(h, hide);
+    Ok(())
+}
+
+fn shellhook_message() -> u32 {
+    static MSG: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *MSG.get_or_init(|| unsafe { RegisterWindowMessageW(windows::core::w!("SHELLHOOK")) })
+}
+
+fn nudge_shell_taskbar(h: HWND, rude: bool) {
+    let msg = shellhook_message();
+    if msg == 0 {
+        return;
+    }
+    // HSHELL_RUDEAPPACTIVATED is the fullscreen-app activation the shell uses to hide the taskbar.
+    let code = if rude { HSHELL_WINDOWACTIVATED | HSHELL_HIGHBIT } else { HSHELL_WINDOWACTIVATED };
+    let mut info = BSM_APPLICATIONS;
+    unsafe {
+        let _ = BroadcastSystemMessageW(
+            BROADCAST_SYSTEM_MESSAGE_FLAGS(BSF_POSTMESSAGE.0 | BSF_IGNORECURRENTTASK.0),
+            Some(&mut info),
+            msg,
+            WPARAM(code as usize),
+            LPARAM(h.0 as isize),
+        );
+    }
+}
+
 pub(super) fn set_borderless(id: WindowId) -> PlatformResult<()> {
     let h = ensure_responsive(id)?;
     let (style, ex_style) = styles(h);
@@ -318,11 +380,12 @@ pub(super) fn restore_state(id: WindowId, state: &WindowState) -> PlatformResult
                 rcNormalPosition: to_win_rect(state.restore_bounds),
                 ..Default::default()
             };
-            unsafe { SetWindowPlacement(h, &placement) }.map_err(|e| window_error(id, "SetWindowPlacement", e))
+            unsafe { SetWindowPlacement(h, &placement) }.map_err(|e| window_error(id, "SetWindowPlacement", e))?;
         }
         ShowState::Normal | ShowState::Minimized => {
             ensure_normal_show_state(h);
-            set_window_pos(id, h, state.bounds, SWP_FRAMECHANGED)
+            set_window_pos(id, h, state.bounds, SWP_FRAMECHANGED)?;
         }
     }
+    set_topmost(id, state.topmost)
 }
