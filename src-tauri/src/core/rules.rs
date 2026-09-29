@@ -101,6 +101,7 @@ mod tests {
             Matcher::ProcessName("chrome.exe".into()),
             Matcher::ProcessName("msedge.exe".into()),
             Matcher::ProcessName("firefox.exe".into()),
+            Matcher::ProcessName("librewolf.exe".into()),
         ])
     }
 

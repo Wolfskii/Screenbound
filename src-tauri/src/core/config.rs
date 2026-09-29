@@ -48,6 +48,7 @@ impl Default for AppConfig {
                     Matcher::ProcessName("chrome.exe".into()),
                     Matcher::ProcessName("msedge.exe".into()),
                     Matcher::ProcessName("firefox.exe".into()),
+                    Matcher::ProcessName("librewolf.exe".into()),
                 ]),
                 actions: vec![Action::FullscreenZone {
                     zone_id: "zone-left-75".into(),

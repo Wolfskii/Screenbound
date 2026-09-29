@@ -15,7 +15,7 @@ npm install
 npm run tauri dev
 ```
 
-Defaults: zone "75% Left", rule "Browsers" (chrome.exe, msedge.exe, firefox.exe).
+Defaults: zone "75% Left", rule "Browsers" (chrome.exe, msedge.exe, firefox.exe, librewolf.exe).
 
 ## Docs
 
