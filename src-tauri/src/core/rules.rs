@@ -66,6 +66,8 @@ fn default_true() -> bool {
 }
 
 impl WindowRule {
+    // find_map stays correct once more Action variants exist.
+    #[allow(clippy::unnecessary_find_map)]
     pub fn fullscreen_zone(&self) -> Option<(&str, ChromeMode)> {
         self.actions.iter().find_map(|a| match a {
             Action::FullscreenZone { zone_id, chrome } => Some((zone_id.as_str(), *chrome)),
