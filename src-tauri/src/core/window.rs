@@ -78,6 +78,9 @@ pub struct WindowState {
     /// rect is then that zone.
     #[serde(default)]
     pub zone_snapped: bool,
+    /// Click-through overlay (Firefox's fullscreen fade). Not a window to constrain.
+    #[serde(default)]
+    pub click_through: bool,
 }
 
 impl WindowState {

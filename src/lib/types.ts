@@ -126,6 +126,8 @@ export interface WindowState {
     dpi: number;
     /** Snapped into a PowerToys FancyZones zone. */
     zoneSnapped?: boolean;
+    /** Click-through overlay, not a window to constrain. */
+    clickThrough?: boolean;
 }
 
 export interface WindowIdentity {

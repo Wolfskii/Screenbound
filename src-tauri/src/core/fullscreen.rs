@@ -8,16 +8,21 @@ use super::window::{ShowState, WindowState};
 /// Pixel slack when comparing our applied bounds with what the window reports back.
 pub const BOUNDS_TOLERANCE: i32 = 2;
 
-/// A window is "fullscreen-like" when it is a visible, borderless, non-maximized window whose
-/// bounds cover an entire monitor. This is how Chromium and Firefox implement both HTML5 and
-/// F11 fullscreen on Windows (same top-level HWND, caption/frame stripped, bounds = monitor),
-/// and it also matches borderless-windowed games/players. Exclusive (DXGI/D3D) fullscreen
-/// can look identical but cannot be controlled this way; see docs/fullscreen-research.md.
+/// A window is "fullscreen-like" when it is a visible, borderless window whose bounds cover an
+/// entire monitor. Chromium and Firefox F11 do this as a normal (not maximized) window.
+/// Firefox's HTML5 fullscreen (YouTube's button) often stays `SW_SHOWMAXIMIZED` after it strips
+/// the caption, so maximized is included. A normal maximized window still has a caption and is
+/// excluded below. Exclusive (DXGI/D3D) fullscreen can look identical but cannot be controlled
+/// this way; see docs/fullscreen-research.md.
 pub fn fullscreen_monitor<'a>(
     state: &WindowState,
     monitors: &'a [MonitorInfo],
 ) -> Option<&'a MonitorInfo> {
-    if !state.visible || state.cloaked || state.show_state != ShowState::Normal {
+    if !state.visible
+        || state.cloaked
+        || state.click_through
+        || state.show_state == ShowState::Minimized
+    {
         return None;
     }
     if state.has_title_bar || state.has_resize_frame {
@@ -51,7 +56,8 @@ const NEAR_FULLSCREEN_TOLERANCE: i32 = 2;
 fn is_near_fullscreen(state: &WindowState, monitors: &[MonitorInfo]) -> bool {
     state.visible
         && !state.cloaked
-        && state.show_state == ShowState::Normal
+        && !state.click_through
+        && state.show_state != ShowState::Minimized
         && state.is_borderless()
         && monitors
             .iter()
@@ -180,6 +186,7 @@ pub(crate) fn test_state(bounds: Rect) -> WindowState {
         monitor: None,
         dpi: 96,
         zone_snapped: false,
+        click_through: false,
     }
 }
 
@@ -231,11 +238,21 @@ mod tests {
         s.show_state = ShowState::Maximized;
         assert!(!is_fullscreen_like(&s, &ms));
 
+        // Firefox HTML5 fullscreen (YouTube's button) stays maximized, but borderless and
+        // covering the monitor. F11 clears the maximized state; both must be caught.
+        let mut s = test_state(Rect::new(-8, -8, 5128, 1448));
+        s.show_state = ShowState::Maximized;
+        assert_eq!(fullscreen_monitor(&s, &ms).unwrap().id.0, "main");
+
         let s = test_state(Rect::new(0, 0, 3840, 1440));
         assert!(!is_fullscreen_like(&s, &ms));
 
         let mut s = test_state(Rect::new(0, 0, 5120, 1440));
         s.cloaked = true;
+        assert!(!is_fullscreen_like(&s, &ms));
+
+        let mut s = test_state(Rect::new(0, 0, 5120, 1440));
+        s.click_through = true;
         assert!(!is_fullscreen_like(&s, &ms));
     }
 

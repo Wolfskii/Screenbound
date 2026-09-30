@@ -78,7 +78,12 @@ by design; measure) · 18. Generic structure ✅
 - Elevated windows can't be modified from an unelevated ScreenBound (UIPI) → logged as access denied.
 - Chromium marks fullscreen windows via `ITaskbarList2::MarkFullscreenWindow`; taskbar may stay
   hidden while the constrained window is active.
-- LibreWolf/Firefox HTML5 fullscreen (YouTube, 2026-09): after the zone resize the taskbar stayed
+- LibreWolf/Firefox HTML5 fullscreen (YouTube button): the button resizes onto the monitor
+  several times. Applying on the first event lost to a later Firefox resize, then gave up.
+  Monitor-sized changes now wait until the rect settles (max 1 s). The button can also leave the
+  window maximized and borderless; that is treated as fullscreen. 🧪 confirm YouTube button and F11.
+  The installed build under `%LOCALAPPDATA%\ScreenBound` does not pick this up until the next
+  `task dev` / `task deploy`. After the zone resize the taskbar stayed
   painted over the window until the video was clicked. Constrained windows are now raised above
   the taskbar and re-marked fullscreen immediately. Exiting fullscreen also restored a smaller
   window than before the click; we now put back the last framed window ourselves. 🧪 confirm both

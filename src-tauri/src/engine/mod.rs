@@ -33,6 +33,12 @@ pub use handle::{EngineHandle, EngineMessage};
 /// Collapses bursts of native events (e.g. restore → restyle → resize during a fullscreen
 /// transition) into one evaluation, measured from the first event so busy windows can't starve.
 const EVENT_SETTLE: Duration = Duration::from_millis(60);
+/// YouTube's fullscreen button (Firefox DOM fullscreen) resizes the window onto the monitor
+/// several times. Applying on the first of those loses: a later resize puts the monitor rect
+/// back, and after a few of those we used to give up. Wait until the rect stops changing.
+const FULLSCREEN_SETTLE: Duration = Duration::from_millis(300);
+/// Don't wait forever if the app keeps nudging the rect.
+const FULLSCREEN_SETTLE_CAP: Duration = Duration::from_millis(1000);
 const DISPLAY_SETTLE: Duration = Duration::from_millis(500);
 /// How far up an owner chain to look when deciding whether a window belongs to a managed one.
 const MAX_OWNER_DEPTH: usize = 8;
@@ -179,6 +185,8 @@ pub struct Engine {
     /// Fullscreen windows we failed to manage (e.g. elevated); retried once they leave fullscreen.
     rejected: HashSet<WindowId>,
     pending: HashMap<WindowId, Instant>,
+    /// When the current monitor-sized burst started, so the settle wait stays capped.
+    fullscreen_since: HashMap<WindowId, Instant>,
     display_pending: Option<Instant>,
     moving: HashSet<WindowId>,
     animations: HashMap<WindowId, Animation>,
@@ -232,6 +240,7 @@ impl Engine {
             last_normal: HashMap::new(),
             rejected: HashSet::new(),
             pending: HashMap::new(),
+            fullscreen_since: HashMap::new(),
             display_pending: None,
             moving: HashSet::new(),
             animations: HashMap::new(),
@@ -325,13 +334,15 @@ impl Engine {
             PlatformEvent::WindowChanged(id) => {
                 if self.moving.contains(&id) || self.animations.contains_key(&id) {
                     // A title-bar drag is the user, not a fullscreen transition.
-                } else if self.managed.contains_key(&id)
-                    || self.is_managed_app(id)
-                    || self.is_monitor_fullscreen(id)
-                {
-                    // Apply on this turn. Waiting out the settle leaves a frame of real fullscreen on screen.
+                } else if self.is_monitor_fullscreen(id) {
+                    let started = *self.fullscreen_since.entry(id).or_insert(now);
+                    let deadline = (now + FULLSCREEN_SETTLE).min(started + FULLSCREEN_SETTLE_CAP);
+                    self.pending.insert(id, deadline);
+                } else if self.managed.contains_key(&id) || self.is_managed_app(id) {
+                    self.fullscreen_since.remove(&id);
                     self.pending.insert(id, now);
                 } else {
+                    self.fullscreen_since.remove(&id);
                     self.pending.entry(id).or_insert(now + EVENT_SETTLE);
                 }
             }
@@ -409,6 +420,7 @@ impl Engine {
     // ---- core state machine ----------------------------------------------------------------
 
     fn evaluate(&mut self, id: WindowId) {
+        self.fullscreen_since.remove(&id);
         if !self.platform.exists(id) {
             self.forget(id);
             return;
@@ -1113,6 +1125,7 @@ impl Engine {
 
     fn forget(&mut self, id: WindowId) {
         self.pending.remove(&id);
+        self.fullscreen_since.remove(&id);
         self.moving.remove(&id);
         self.animations.remove(&id);
         self.panels.remove(&id);

@@ -21,8 +21,22 @@ Source: `ui/views/win/fullscreen_handler.cc`, `ui/views/win/hwnd_message_handler
 
 ## Firefox / LibreWolf — observed 2026-09
 
-Same top-level `MozillaWindowClass` HWND for HTML5 fullscreen (YouTube in LibreWolf). Constraining
-the window works. The taskbar stays painted over the zone until the video is clicked: the shell
+Same top-level `MozillaWindowClass` HWND for HTML5 fullscreen (YouTube in LibreWolf) and for F11.
+F11 clears the maximized state (`IsZoomed` is false). YouTube's fullscreen button often does not:
+`HideWindowChrome` strips `WS_CAPTION | WS_THICKFRAME` while `showCmd` stays `SW_SHOWMAXIMIZED`,
+and the window rect still covers the monitor. Detection used to require a non-maximized window, so
+that path was ignored and the video stayed monitor-sized. Maximized borderless windows that cover
+a monitor are now treated as fullscreen. A captioned maximized window is still ignored.
+
+`OnWindowPosChanging` rewrites any move+size back to the monitor rect while Firefox's size mode is
+fullscreen (`bug 1482920`). `SWP_NOSENDCHANGING` skips that message for our own `SetWindowPos`.
+DOM fullscreen (YouTube's button) still calls `SetWindowPos` itself several times during the
+enter transition, after the first WinEvent. Applying on that first event lost the race: Firefox
+put the monitor rect back, ScreenBound re-applied a few times, then gave up and left the window
+monitor-sized. F11 does not repeat the resize, so it stuck. Monitor-sized changes now wait until
+the rect stops moving (at most 1 s) before the zone is applied.
+
+The taskbar stays painted over the zone until the video is clicked: the shell
 only drops the taskbar below a window that no longer covers the monitor when that window is
 activated, and our `SetWindowPos` does not activate. While managed, the window is raised
 `HWND_TOPMOST` and re-marked with `ITaskbarList2::MarkFullscreenWindow`, then the shell is nudged
