@@ -18,7 +18,7 @@ task dev
 
 `task --list` shows the rest (`task test`, `task release`, `task deploy`, …).
 
-Defaults: zone "75% Left", plus rules **Browsers** (Chrome, Edge, Brave, Firefox, LibreWolf) and **Media players** (VLC, mpv, MPC-HC/BE, PotPlayer, and other common video players). The **Apps** tab lists programs that have a window open, and ones seen before, with a toggle to constrain that program's fullscreen.
+Defaults: zone "75% Left" and a rule for every app you turn on. The **Groups** tab names groups and gives them a color and icon; its switch turns that group on or off. The **Apps** tab turns individual apps on and assigns them to a group. A rule can target all apps that are on, specific groups, or specific apps. Settings stay in `%APPDATA%\com.screenbound.app` across reinstalls unless uninstall **Delete app data** is checked.
 
 ## Docs
 

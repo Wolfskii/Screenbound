@@ -66,5 +66,5 @@ prints how its bounds evolve — useful for checking whether an app vetoes exter
 
 - Rust: `cargo clippy` clean, serde `camelCase` for anything crossing to the UI.
 - TS types in `src/lib/types.ts` mirror the Rust serde types — update both together.
-- Config lives in `%APPDATA%\com.screenbound.app\config.json`; journal in `managed-windows.json`.
+- Config lives in `%APPDATA%\com.screenbound.app\config.json` (zones, rules, seen apps); journal in `managed-windows.json`. The NSIS uninstaller leaves that folder in place unless **Delete app data** is checked.
 - Keep comments short; explain *why*, not *what*.

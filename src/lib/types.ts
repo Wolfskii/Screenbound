@@ -47,12 +47,33 @@ export type Matcher =
 
 export type Action = { type: "fullscreenZone"; zoneId: string; chrome: ChromeMode };
 
+export type RuleScope =
+    | { type: "all" }
+    | { type: "groups"; groupIds: string[] }
+    | { type: "apps"; processNames: string[] };
+
 export interface WindowRule {
     id: string;
     name: string;
     enabled: boolean;
     matcher: Matcher;
+    /** When set, the rule applies to turned-on apps instead of `matcher`. */
+    scope?: RuleScope | null;
     actions: Action[];
+}
+
+export interface AppGroup {
+    id: string;
+    name: string;
+    color: string;
+    icon: string;
+}
+
+export interface KnownApp {
+    processName: string;
+    title: string;
+    enabled?: boolean;
+    groupId?: string | null;
 }
 
 export interface AppConfig {
@@ -60,6 +81,9 @@ export interface AppConfig {
     enabled: boolean;
     zones: Zone[];
     rules: WindowRule[];
+    groups?: AppGroup[];
+    /** Apps seen on this PC. Omitted in configs written before this field existed. */
+    knownApps?: KnownApp[];
 }
 
 export type ShowState = "normal" | "minimized" | "maximized";

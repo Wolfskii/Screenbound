@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::rules::{Action, Matcher, WindowRule};
+use super::rules::{Action, Matcher, RuleScope, WindowRule};
 use super::window::ChromeMode;
 use super::zone::{NormalizedRect, Zone, ZoneReference};
 
@@ -18,6 +18,36 @@ pub struct AppConfig {
     pub enabled: bool,
     pub zones: Vec<Zone>,
     pub rules: Vec<WindowRule>,
+    /// Named groups apps can be placed in. A rule can target one or more of these.
+    #[serde(default)]
+    pub groups: Vec<AppGroup>,
+    /// Apps ScreenBound has seen. Stored with the rest of the config so the list survives
+    /// reinstalls; the uninstaller deletes it only when "Delete app data" is checked.
+    #[serde(default)]
+    pub known_apps: Vec<KnownApp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppGroup {
+    pub id: String,
+    pub name: String,
+    /// `#rrggbb`.
+    pub color: String,
+    /// Key into the fixed icon set shown in the Apps tab.
+    pub icon: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnownApp {
+    pub process_name: String,
+    pub title: String,
+    /// Turned on in the Apps list. A rule only matches an app that is on.
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
 }
 
 fn default_version() -> u32 {
@@ -27,47 +57,6 @@ fn default_version() -> u32 {
 fn default_true() -> bool {
     true
 }
-
-fn zone_rule(id: &str, name: &str, processes: &[&str]) -> WindowRule {
-    WindowRule {
-        id: id.into(),
-        name: name.into(),
-        enabled: true,
-        matcher: Matcher::Any(processes.iter().map(|n| Matcher::ProcessName((*n).into())).collect()),
-        actions: vec![Action::FullscreenZone {
-            zone_id: "zone-left-75".into(),
-            chrome: ChromeMode::Keep,
-        }],
-    }
-}
-
-/// Common Windows video players. There is no OS category for "media player", so this is a
-/// process list; add another name in the Rules panel when a player is missing.
-const MEDIA_PLAYERS: &[&str] = &[
-    "vlc.exe",
-    "mpv.exe",
-    "mpvnet.exe",
-    "smplayer.exe",
-    "mplayer.exe",
-    "ffplay.exe",
-    "mpc-hc.exe",
-    "mpc-hc64.exe",
-    "mpc-be.exe",
-    "mpc-be64.exe",
-    "mpc-qt.exe",
-    "potplayer.exe",
-    "potplayer64.exe",
-    "potplayermini.exe",
-    "potplayermini64.exe",
-    "kmplayer.exe",
-    "gom.exe",
-    "kodi.exe",
-    "wmplayer.exe",
-    "jellyfinmediaplayer.exe",
-    "plex.exe",
-    "plex htpc.exe",
-    "zplayer.exe",
-];
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -81,16 +70,19 @@ impl Default for AppConfig {
                 monitor: None,
                 reference: ZoneReference::Monitor,
             }],
-            rules: vec![
-                zone_rule("rule-browsers", "Browsers", &[
-                    "chrome.exe",
-                    "msedge.exe",
-                    "brave.exe",
-                    "firefox.exe",
-                    "librewolf.exe",
-                ]),
-                zone_rule("rule-media-players", "Media players", MEDIA_PLAYERS),
-            ],
+            rules: vec![WindowRule {
+                id: "rule-all".into(),
+                name: "All apps".into(),
+                enabled: true,
+                matcher: Matcher::Any(vec![]),
+                scope: Some(RuleScope::All),
+                actions: vec![Action::FullscreenZone {
+                    zone_id: "zone-left-75".into(),
+                    chrome: ChromeMode::Keep,
+                }],
+            }],
+            groups: Vec::new(),
+            known_apps: Vec::new(),
         }
     }
 }
@@ -123,6 +115,25 @@ impl AppConfig {
             }
             zone.rect = zone.rect.sanitized();
         }
+        let mut seen_groups = std::collections::HashSet::new();
+        for group in &mut self.groups {
+            if group.id.trim().is_empty() {
+                return Err(ConfigError::Invalid("group with empty id".into()));
+            }
+            if !seen_groups.insert(group.id.clone()) {
+                return Err(ConfigError::Invalid(format!("duplicate group id '{}'", group.id)));
+            }
+            group.name = group.name.trim().to_string();
+            if group.name.is_empty() {
+                group.name = "Group".into();
+            }
+            if !is_hex_color(&group.color) {
+                group.color = "#4fa3ff".into();
+            }
+            if !GROUP_ICONS.contains(&group.icon.as_str()) {
+                group.icon = "apps".into();
+            }
+        }
         let mut seen = std::collections::HashSet::new();
         for rule in &self.rules {
             if !seen.insert(rule.id.clone()) {
@@ -137,8 +148,36 @@ impl AppConfig {
                 }
             }
         }
+        let mut seen_apps = std::collections::HashMap::<String, KnownApp>::new();
+        for app in self.known_apps.drain(..) {
+            let name = app.process_name.trim().to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let group_id = app.group_id.filter(|id| seen_groups.contains(id));
+            seen_apps.insert(
+                name.to_lowercase(),
+                KnownApp { process_name: name, title: app.title, enabled: app.enabled, group_id },
+            );
+        }
+        self.known_apps = seen_apps.into_values().collect();
+        self.known_apps.sort_by_key(|app| app.process_name.to_lowercase());
+        for rule in &mut self.rules {
+            if let Some(RuleScope::Groups { group_ids }) = &mut rule.scope {
+                group_ids.retain(|id| seen_groups.contains(id));
+            }
+        }
         self.version = CONFIG_VERSION;
         Ok(self)
+    }
+
+    pub fn match_rule(&self, id: &super::window::WindowIdentity) -> Option<&WindowRule> {
+        let known = self.known_apps.iter().find(|app| app.process_name.eq_ignore_ascii_case(&id.process_name));
+        super::rules::first_match(
+            &self.rules,
+            id,
+            known.map(|app| (app.enabled, app.group_id.as_deref())),
+        )
     }
 
     /// Loads config; a missing file yields defaults. A corrupt file is an error so the caller
@@ -154,6 +193,13 @@ impl AppConfig {
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
         write_json_atomic(path, self)
     }
+}
+
+const GROUP_ICONS: &[&str] = &["apps", "browser", "video", "game", "music", "chat", "folder", "star"];
+
+fn is_hex_color(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars.next() == Some('#') && chars.clone().count() == 6 && chars.all(|c| c.is_ascii_hexdigit())
 }
 
 /// Writes via temp file + rename so a crash mid-write cannot leave a truncated file.
@@ -179,20 +225,28 @@ mod tests {
     }
 
     #[test]
-    fn default_media_players_match_common_video_exes() {
-        use crate::core::rules::test_identity;
+    fn default_has_no_preset_apps() {
         let cfg = AppConfig::default();
-        let media = cfg.rules.iter().find(|r| r.id == "rule-media-players").unwrap();
-        assert!(media.matcher.matches(&test_identity("vlc.exe", "Qt6QWindowIcon", "VLC")));
-        assert!(media.matcher.matches(&test_identity("PotPlayerMini64.EXE", "", "")));
-        assert!(!media.matcher.matches(&test_identity("notepad.exe", "", "")));
-        assert_eq!(media.fullscreen_zone().map(|(z, _)| z), Some("zone-left-75"));
+        assert!(cfg.known_apps.is_empty());
+        assert!(cfg.groups.is_empty());
+        assert_eq!(cfg.rules.len(), 1);
+        assert!(matches!(cfg.rules[0].scope, Some(RuleScope::All)));
     }
 
     #[test]
     fn rejects_dangling_zone_reference() {
+        use crate::core::rules::{Action, Matcher};
+        use crate::core::window::ChromeMode;
         let mut cfg = AppConfig::default();
         cfg.zones.clear();
+        cfg.rules.push(WindowRule {
+            id: "r".into(),
+            name: "Apps".into(),
+            enabled: true,
+            matcher: Matcher::ProcessName("vlc.exe".into()),
+            scope: None,
+            actions: vec![Action::FullscreenZone { zone_id: "missing".into(), chrome: ChromeMode::Keep }],
+        });
         assert!(matches!(cfg.validated(), Err(ConfigError::Invalid(_))));
     }
 

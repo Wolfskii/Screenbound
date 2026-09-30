@@ -20,7 +20,6 @@ use crate::core::fullscreen::{
 };
 use crate::core::geometry::Rect;
 use crate::core::monitor::{monitor_for_rect, MonitorId, MonitorInfo};
-use crate::core::rules::first_match;
 use crate::core::window::{ChromeMode, WindowId, WindowIdentity, WindowInfo, WindowState};
 use crate::platform::{PlatformError, PlatformEvent, PlatformWindowManager};
 use activity::{ActivityEntry, ActivityLevel, ActivityLog};
@@ -213,7 +212,14 @@ impl Engine {
         let now = Instant::now();
         match event {
             PlatformEvent::WindowChanged(id) => {
-                self.pending.entry(id).or_insert(now + EVENT_SETTLE);
+                if self.moving.contains(&id) {
+                    // A title-bar drag is the user, not a fullscreen transition.
+                } else if self.managed.contains_key(&id) || self.is_monitor_fullscreen(id) {
+                    // Apply on this turn. Waiting out the settle leaves a frame of real fullscreen on screen.
+                    self.pending.insert(id, now);
+                } else {
+                    self.pending.entry(id).or_insert(now + EVENT_SETTLE);
+                }
             }
             PlatformEvent::WindowDestroyed(id) => self.forget(id),
             PlatformEvent::MoveSizeStart(id) => {
@@ -226,6 +232,13 @@ impl Engine {
             PlatformEvent::DisplayChanged => {
                 self.display_pending.get_or_insert(now + DISPLAY_SETTLE);
             }
+        }
+    }
+
+    fn is_monitor_fullscreen(&self, id: WindowId) -> bool {
+        match self.platform.state(id) {
+            Ok(state) => fullscreen_monitor(&state, &self.monitors).is_some(),
+            Err(_) => false,
         }
     }
 
@@ -263,7 +276,7 @@ impl Engine {
             return;
         }
         let Ok(identity) = self.platform.identity(id) else { return };
-        let Some(rule) = first_match(&self.config.rules, &identity) else { return };
+        let Some(rule) = self.config.match_rule(&identity) else { return };
         let Some((zone_id, chrome)) = rule.fullscreen_zone() else { return };
         let (rule_id, zone_id) = (rule.id.clone(), zone_id.to_string());
 
@@ -673,7 +686,7 @@ impl Engine {
                     fullscreen_like: fullscreen_monitor(&state, &self.monitors).is_some(),
                     hung: self.platform.is_hung(id),
                     managed: self.managed.contains_key(&id),
-                    matched_rule: first_match(&self.config.rules, &identity).map(|r| r.name.clone()),
+                    matched_rule: self.config.match_rule(&identity).map(|r| r.name.clone()),
                     identity,
                     state,
                     monitor_name,
@@ -702,7 +715,7 @@ impl Engine {
             let action = self
                 .config
                 .enabled
-                .then(|| first_match(&self.config.rules, &self.managed[&id].identity))
+                .then(|| self.config.match_rule(&self.managed[&id].identity))
                 .flatten()
                 .and_then(|r| r.fullscreen_zone().map(|(z, c)| (r.id.clone(), z.to_string(), c)));
             let Some((rule_id, zone_id, chrome)) = action else {

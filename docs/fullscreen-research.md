@@ -32,6 +32,11 @@ Exiting fullscreen restored a smaller window than before the click. `InfallibleM
 caches `GetScreenBounds()` on every fullscreen entry, so a resize while fullscreen replaces the
 rect Firefox puts back. On exit we restore the last framed or maximized window we observed.
 
+The monitor-sized frame was visible for a moment before the zone applied: out-of-context WinEvents
+arrive after the resize, and evaluation waited 60 ms to coalesce the transition. Fullscreen-sized
+changes are applied on the same turn, and the window is DWM-cloaked across `SetWindowPos` so that
+jump is not presented.
+
 ## Detection heuristic (core/fullscreen.rs)
 
 Visible, not cloaked, normal show state, no caption, no thick frame, window rect ⊇ monitor rect.

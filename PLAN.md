@@ -76,6 +76,7 @@ by design; measure) · 18. Generic structure ✅
 1. Manual matrix for Chrome, Firefox, HTML5 video fullscreen (YouTube), exit via Esc/F11.
 2. Multi-monitor + negative coordinates + mixed DPI.
 3. Measure idle CPU; review `EVENT_OBJECT_LOCATIONCHANGE` volume.
-4. Tray icon + close-to-tray (a window manager should keep running), autostart.
-5. Then post-MVP: generic rules UI (class/title matchers), fixed size, aspect ratio, generic
+4. Tray icon + close-to-tray 🧪 (Exit on the tray menu quits; autostart still open).
+5. Hide the one-frame real-fullscreen flash 🧪 (immediate apply + DWM cloak across the zone move).
+6. Then post-MVP: generic rules UI (class/title matchers), fixed size, aspect ratio, generic
    borderless, always-on-top, profiles, macOS/Linux backends.

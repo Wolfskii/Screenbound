@@ -2,7 +2,9 @@ use std::ffi::c_void;
 
 use windows::core::{BOOL, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, SetLastError, FILETIME, HWND, LPARAM, RECT, WIN32_ERROR, WPARAM};
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
+};
 use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONULL};
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::StationsAndDesktops::{
@@ -256,10 +258,48 @@ fn ensure_normal_show_state(h: HWND) {
 
 pub(super) fn set_bounds(id: WindowId, bounds: Rect) -> PlatformResult<()> {
     let h = ensure_responsive(id)?;
+    // Hide the window from the desktop while the rect changes, so the monitor-sized fullscreen
+    // frame is not presented before the zone rect. Drop uncloaks even if the move fails.
+    let _cloak = CloakGuard::hide_unless_already(h);
     ensure_normal_show_state(h);
     // Skipping WM_WINDOWPOSCHANGING stops apps (e.g. Chromium in fullscreen) from rewriting
     // the rect back to the monitor; they still get WM_WINDOWPOSCHANGED/WM_SIZE to relayout.
     set_window_pos(id, h, bounds, SWP_FRAMECHANGED | SWP_NOSENDCHANGING)
+}
+
+struct CloakGuard {
+    hwnd: HWND,
+    active: bool,
+}
+
+impl CloakGuard {
+    fn hide_unless_already(hwnd: HWND) -> Self {
+        if is_cloaked(hwnd) {
+            return Self { hwnd, active: false };
+        }
+        set_cloak(hwnd, true);
+        Self { hwnd, active: true }
+    }
+}
+
+impl Drop for CloakGuard {
+    fn drop(&mut self) {
+        if self.active {
+            set_cloak(self.hwnd, false);
+        }
+    }
+}
+
+fn set_cloak(hwnd: HWND, cloak: bool) {
+    let value = u32::from(cloak);
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAK,
+            &value as *const u32 as *const _,
+            std::mem::size_of::<u32>() as u32,
+        )
+    };
 }
 
 /// The shell keeps the taskbar above a window that no longer covers the monitor until that
