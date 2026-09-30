@@ -23,6 +23,8 @@ else stays visible next to it.
   always do. ScreenBound handles the rest.
 - **Real fullscreen, not an overlay.** It moves the app's actual window: no picture-in-picture, no
   capture, no lag.
+- **Works with PowerToys FancyZones.** Already snap windows with Microsoft PowerToys FancyZones?
+  Snap an app into a zone, go fullscreen, and it fills that same FancyZones zone. No extra setup.
 - **You choose which apps.** Turn it on for browsers and media players and leave games or anything
   else alone.
 - **Undoes itself.** Exit fullscreen or quit ScreenBound and every window goes back to where it was.
