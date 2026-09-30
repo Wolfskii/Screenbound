@@ -18,7 +18,7 @@ task dev
 
 `task --list` shows the rest (`task test`, `task release`, `task deploy`, …).
 
-Defaults: zone "75% Left", rule "Browsers" (chrome.exe, msedge.exe, brave.exe, firefox.exe, librewolf.exe).
+Defaults: zone "75% Left", plus rules **Browsers** (Chrome, Edge, Brave, Firefox, LibreWolf) and **Media players** (VLC, mpv, MPC-HC/BE, PotPlayer, and other common video players). Windows has no media-player category, so a missing player is a process name added on the Rules tab (`vlc.exe`).
 
 ## Docs
 

@@ -28,6 +28,47 @@ fn default_true() -> bool {
     true
 }
 
+fn zone_rule(id: &str, name: &str, processes: &[&str]) -> WindowRule {
+    WindowRule {
+        id: id.into(),
+        name: name.into(),
+        enabled: true,
+        matcher: Matcher::Any(processes.iter().map(|n| Matcher::ProcessName((*n).into())).collect()),
+        actions: vec![Action::FullscreenZone {
+            zone_id: "zone-left-75".into(),
+            chrome: ChromeMode::Keep,
+        }],
+    }
+}
+
+/// Common Windows video players. There is no OS category for "media player", so this is a
+/// process list; add another name in the Rules panel when a player is missing.
+const MEDIA_PLAYERS: &[&str] = &[
+    "vlc.exe",
+    "mpv.exe",
+    "mpvnet.exe",
+    "smplayer.exe",
+    "mplayer.exe",
+    "ffplay.exe",
+    "mpc-hc.exe",
+    "mpc-hc64.exe",
+    "mpc-be.exe",
+    "mpc-be64.exe",
+    "mpc-qt.exe",
+    "potplayer.exe",
+    "potplayer64.exe",
+    "potplayermini.exe",
+    "potplayermini64.exe",
+    "kmplayer.exe",
+    "gom.exe",
+    "kodi.exe",
+    "wmplayer.exe",
+    "jellyfinmediaplayer.exe",
+    "plex.exe",
+    "plex htpc.exe",
+    "zplayer.exe",
+];
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -40,22 +81,16 @@ impl Default for AppConfig {
                 monitor: None,
                 reference: ZoneReference::Monitor,
             }],
-            rules: vec![WindowRule {
-                id: "rule-browsers".into(),
-                name: "Browsers".into(),
-                enabled: true,
-                matcher: Matcher::Any(vec![
-                    Matcher::ProcessName("chrome.exe".into()),
-                    Matcher::ProcessName("msedge.exe".into()),
-                    Matcher::ProcessName("brave.exe".into()),
-                    Matcher::ProcessName("firefox.exe".into()),
-                    Matcher::ProcessName("librewolf.exe".into()),
+            rules: vec![
+                zone_rule("rule-browsers", "Browsers", &[
+                    "chrome.exe",
+                    "msedge.exe",
+                    "brave.exe",
+                    "firefox.exe",
+                    "librewolf.exe",
                 ]),
-                actions: vec![Action::FullscreenZone {
-                    zone_id: "zone-left-75".into(),
-                    chrome: ChromeMode::Keep,
-                }],
-            }],
+                zone_rule("rule-media-players", "Media players", MEDIA_PLAYERS),
+            ],
         }
     }
 }
@@ -141,6 +176,17 @@ mod tests {
         let cfg = AppConfig::default().validated().unwrap();
         let json = serde_json::to_string(&cfg).unwrap();
         assert_eq!(serde_json::from_str::<AppConfig>(&json).unwrap(), cfg);
+    }
+
+    #[test]
+    fn default_media_players_match_common_video_exes() {
+        use crate::core::rules::test_identity;
+        let cfg = AppConfig::default();
+        let media = cfg.rules.iter().find(|r| r.id == "rule-media-players").unwrap();
+        assert!(media.matcher.matches(&test_identity("vlc.exe", "Qt6QWindowIcon", "VLC")));
+        assert!(media.matcher.matches(&test_identity("PotPlayerMini64.EXE", "", "")));
+        assert!(!media.matcher.matches(&test_identity("notepad.exe", "", "")));
+        assert_eq!(media.fullscreen_zone().map(|(z, _)| z), Some("zone-left-75"));
     }
 
     #[test]
