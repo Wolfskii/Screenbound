@@ -15,13 +15,15 @@ use serde::Serialize;
 
 use crate::core::config::{AppConfig, ConfigError};
 use crate::core::fullscreen::{
-    classify_managed, compensate_invisible_frame, fullscreen_monitor, is_resting_layout, map_companion,
-    snapped_zone_target, ManagedObservation, BOUNDS_TOLERANCE,
+    classify_managed, compensate_invisible_frame, fullscreen_monitor, is_resting_layout,
+    map_companion, snapped_zone_target, ManagedObservation, BOUNDS_TOLERANCE,
 };
 use crate::core::geometry::Rect;
 use crate::core::monitor::{monitor_for_rect, MonitorId, MonitorInfo};
 use crate::core::transition::{frame_at, START_DELAY};
-use crate::core::window::{ChromeMode, ShowState, WindowId, WindowIdentity, WindowInfo, WindowState};
+use crate::core::window::{
+    ChromeMode, ShowState, WindowId, WindowIdentity, WindowInfo, WindowState,
+};
 use crate::platform::{PlatformError, PlatformEvent, PlatformWindowManager};
 use activity::{ActivityEntry, ActivityLevel, ActivityLog};
 use journal::JournalEntry;
@@ -187,22 +189,35 @@ pub struct Engine {
 }
 
 fn label(identity: &WindowIdentity, id: WindowId) -> String {
-    let name = if identity.process_name.is_empty() { "<unknown>" } else { &identity.process_name };
+    let name = if identity.process_name.is_empty() {
+        "<unknown>"
+    } else {
+        &identity.process_name
+    };
     format!("{name} {id}")
 }
 
 impl Engine {
-    pub fn new(platform: Arc<dyn PlatformWindowManager>, paths: EnginePaths, notify: Notifier) -> Self {
+    pub fn new(
+        platform: Arc<dyn PlatformWindowManager>,
+        paths: EnginePaths,
+        notify: Notifier,
+    ) -> Self {
         let mut activity = ActivityLog::default();
         let config = match AppConfig::load(&paths.config) {
             Ok(c) => c,
             Err(e) => {
-                let backup = paths.config.with_extension(format!("json.broken-{}", activity::now_ms()));
+                let backup = paths
+                    .config
+                    .with_extension(format!("json.broken-{}", activity::now_ms()));
                 let _ = std::fs::rename(&paths.config, &backup);
                 activity.push(
                     ActivityLevel::Warn,
                     None,
-                    format!("Config could not be loaded ({e}); moved to {} and using defaults", backup.display()),
+                    format!(
+                        "Config could not be loaded ({e}); moved to {} and using defaults",
+                        backup.display()
+                    ),
                 );
                 AppConfig::default()
             }
@@ -258,7 +273,10 @@ impl Engine {
 
     fn recover_journal(&mut self) {
         for entry in journal::load(&self.paths.journal) {
-            let still_ours = self.platform.identity(entry.window).is_ok_and(|i| i.process == entry.process)
+            let still_ours = self
+                .platform
+                .identity(entry.window)
+                .is_ok_and(|i| i.process == entry.process)
                 && self
                     .platform
                     .state(entry.window)
@@ -272,9 +290,17 @@ impl Engine {
                     if let Err(e) = self.platform.set_hides_taskbar(entry.window, true) {
                         tracing::warn!(window = %entry.window, "could not mark recovered fullscreen window: {e}");
                     }
-                    self.log(ActivityLevel::Info, who, "Restored window left constrained by a previous session".into());
+                    self.log(
+                        ActivityLevel::Info,
+                        who,
+                        "Restored window left constrained by a previous session".into(),
+                    );
                 }
-                Err(e) => self.log(ActivityLevel::Warn, who, format!("Could not restore window from previous session: {e}")),
+                Err(e) => self.log(
+                    ActivityLevel::Warn,
+                    who,
+                    format!("Could not restore window from previous session: {e}"),
+                ),
             }
         }
         journal::save(&self.paths.journal, &[]);
@@ -283,7 +309,11 @@ impl Engine {
     fn scan_all(&mut self) {
         match self.platform.enumerate_windows() {
             Ok(ids) => ids.into_iter().for_each(|id| self.evaluate(id)),
-            Err(e) => self.log(ActivityLevel::Error, None, format!("Window enumeration failed: {e}")),
+            Err(e) => self.log(
+                ActivityLevel::Error,
+                None,
+                format!("Window enumeration failed: {e}"),
+            ),
         }
     }
 
@@ -295,7 +325,10 @@ impl Engine {
             PlatformEvent::WindowChanged(id) => {
                 if self.moving.contains(&id) || self.animations.contains_key(&id) {
                     // A title-bar drag is the user, not a fullscreen transition.
-                } else if self.managed.contains_key(&id) || self.is_managed_app(id) || self.is_monitor_fullscreen(id) {
+                } else if self.managed.contains_key(&id)
+                    || self.is_managed_app(id)
+                    || self.is_monitor_fullscreen(id)
+                {
                     // Apply on this turn. Waiting out the settle leaves a frame of real fullscreen on screen.
                     self.pending.insert(id, now);
                 } else {
@@ -348,8 +381,12 @@ impl Engine {
     }
 
     pub fn process_due(&mut self, now: Instant) {
-        let steps: Vec<WindowId> =
-            self.animations.iter().filter(|(_, a)| a.next_step <= now).map(|(id, _)| *id).collect();
+        let steps: Vec<WindowId> = self
+            .animations
+            .iter()
+            .filter(|(_, a)| a.next_step <= now)
+            .map(|(id, _)| *id)
+            .collect();
         for id in steps {
             self.step_animation(id);
         }
@@ -357,7 +394,12 @@ impl Engine {
             self.display_pending = None;
             self.on_display_changed();
         }
-        let due: Vec<WindowId> = self.pending.iter().filter(|(_, t)| **t <= now).map(|(id, _)| *id).collect();
+        let due: Vec<WindowId> = self
+            .pending
+            .iter()
+            .filter(|(_, t)| **t <= now)
+            .map(|(id, _)| *id)
+            .collect();
         for id in due {
             self.pending.remove(&id);
             self.evaluate(id);
@@ -384,11 +426,21 @@ impl Engine {
         if self.place_companion_of_any(id) {
             return;
         }
-        let Ok(identity) = self.platform.identity(id) else { return };
-        let Some(rule) = self.config.match_rule(&identity) else { return };
-        let Some(action) = rule.fullscreen_action() else { return };
-        let (rule_id, zone_id, chrome, use_snapped_zone) =
-            (rule.id.clone(), action.zone_id.to_string(), action.chrome, action.use_snapped_zone);
+        let Ok(identity) = self.platform.identity(id) else {
+            return;
+        };
+        let Some(rule) = self.config.match_rule(&identity) else {
+            return;
+        };
+        let Some(action) = rule.fullscreen_action() else {
+            return;
+        };
+        let (rule_id, zone_id, chrome, use_snapped_zone) = (
+            rule.id.clone(),
+            action.zone_id.to_string(),
+            action.chrome,
+            action.use_snapped_zone,
+        );
 
         let state = match self.platform.state(id) {
             Ok(s) => s,
@@ -397,7 +449,16 @@ impl Engine {
         };
         match fullscreen_monitor(&state, &self.monitors).map(|m| m.id.clone()) {
             Some(monitor) if !self.rejected.contains(&id) => {
-                self.manage(id, identity, rule_id, zone_id, chrome, use_snapped_zone, state, monitor);
+                self.manage(
+                    id,
+                    identity,
+                    rule_id,
+                    zone_id,
+                    chrome,
+                    use_snapped_zone,
+                    state,
+                    monitor,
+                );
             }
             Some(_) => {}
             None => {
@@ -480,26 +541,44 @@ impl Engine {
         self.rejected.insert(id);
         // Undo any partial change (e.g. styles stripped but move refused).
         let _ = self.platform.restore_state(id, state);
-        self.log(ActivityLevel::Warn, Some(who), format!("Fullscreen detected but could not constrain: {error}"));
+        self.log(
+            ActivityLevel::Warn,
+            Some(who),
+            format!("Fullscreen detected but could not constrain: {error}"),
+        );
     }
 
     /// Positions the window in its zone. Returns a human-readable summary.
-    fn apply_zone(&self, m: &mut ManagedWindow, window_monitor: Option<&MonitorId>) -> Result<String, String> {
+    fn apply_zone(
+        &self,
+        m: &mut ManagedWindow,
+        window_monitor: Option<&MonitorId>,
+    ) -> Result<String, String> {
         let plan = self.plan_zone(m, window_monitor)?;
         self.finish_zone(m, &plan)
     }
 
     /// Resolves the zone rect for this window and strips chrome if the rule asks for it.
-    fn plan_zone(&self, m: &ManagedWindow, window_monitor: Option<&MonitorId>) -> Result<ZonePlan, String> {
-        let window_monitor = window_monitor.and_then(|id| self.monitors.iter().find(|x| &x.id == id));
-        let snapped = window_monitor.filter(|_| m.use_snapped_zone).and_then(|monitor| {
-            snapped_zone_target(m.pre_fullscreen.as_ref(), &m.detected, &monitor.bounds).map(|rect| (monitor, rect))
-        });
+    fn plan_zone(
+        &self,
+        m: &ManagedWindow,
+        window_monitor: Option<&MonitorId>,
+    ) -> Result<ZonePlan, String> {
+        let window_monitor =
+            window_monitor.and_then(|id| self.monitors.iter().find(|x| &x.id == id));
+        let snapped = window_monitor
+            .filter(|_| m.use_snapped_zone)
+            .and_then(|monitor| {
+                snapped_zone_target(m.pre_fullscreen.as_ref(), &m.detected, &monitor.bounds)
+                    .map(|rect| (monitor, rect))
+            });
         let (target, zone_name, monitor) = match snapped {
             Some((monitor, rect)) => (rect, "FancyZones zone".to_string(), monitor),
             None => {
-                let zone =
-                    self.config.zone(&m.zone_id).ok_or_else(|| format!("zone '{}' no longer exists", m.zone_id))?;
+                let zone = self
+                    .config
+                    .zone(&m.zone_id)
+                    .ok_or_else(|| format!("zone '{}' no longer exists", m.zone_id))?;
                 let monitor = zone
                     .target_monitor(&self.monitors, window_monitor)
                     .ok_or("no monitor available for zone")?;
@@ -508,7 +587,9 @@ impl Engine {
         };
 
         if m.chrome == ChromeMode::Hide {
-            self.platform.set_borderless(m.id).map_err(|e| e.to_string())?;
+            self.platform
+                .set_borderless(m.id)
+                .map_err(|e| e.to_string())?;
         }
         let before = self.platform.state(m.id).map_err(|e| e.to_string())?;
         Ok(ZonePlan {
@@ -523,10 +604,15 @@ impl Engine {
 
     /// Moves the window to the planned rect and verifies the app kept it there.
     fn finish_zone(&self, m: &mut ManagedWindow, plan: &ZonePlan) -> Result<String, String> {
-        self.platform.set_bounds(m.id, plan.window_rect).map_err(|e| e.to_string())?;
+        self.platform
+            .set_bounds(m.id, plan.window_rect)
+            .map_err(|e| e.to_string())?;
         let after = self.platform.state(m.id).map_err(|e| e.to_string())?;
 
-        if !after.visible_bounds.approx_eq(&plan.target, BOUNDS_TOLERANCE) {
+        if !after
+            .visible_bounds
+            .approx_eq(&plan.target, BOUNDS_TOLERANCE)
+        {
             return Err(format!(
                 "application rejected the zone bounds (wanted {}, got {})",
                 plan.target, after.visible_bounds
@@ -560,22 +646,30 @@ impl Engine {
         if self.managed.is_empty() {
             return false;
         }
-        let Some(pid) = self.platform.process_id(id) else { return false };
+        let Some(pid) = self.platform.process_id(id) else {
+            return false;
+        };
         let owners: Vec<PanelOwner> = self
             .managed
             .values()
             .filter(|m| m.identity.process.pid == pid)
             .filter_map(|m| self.panel_owner(m))
             .collect();
-        owners.into_iter().any(|owner| self.place_companion(id, owner))
+        owners
+            .into_iter()
+            .any(|owner| self.place_companion(id, owner))
     }
 
     /// Starts a fresh panel session for this window: panels it shows now or later are put in the
     /// zone again, even ones the user dragged out last time.
     fn place_companions(&mut self, id: WindowId) {
-        let Some(owner) = self.managed.get(&id).and_then(|m| self.panel_owner(m)) else { return };
+        let Some(owner) = self.managed.get(&id).and_then(|m| self.panel_owner(m)) else {
+            return;
+        };
         self.panels.retain(|_, p| p.owner != owner.id);
-        let Ok(windows) = self.platform.process_windows(owner.pid) else { return };
+        let Ok(windows) = self.platform.process_windows(owner.pid) else {
+            return;
+        };
         for panel in windows {
             self.place_companion(panel, owner);
         }
@@ -593,7 +687,9 @@ impl Engine {
         if id == owner.id {
             return false;
         }
-        let Ok(state) = self.platform.state(id) else { return false };
+        let Ok(state) = self.platform.state(id) else {
+            return false;
+        };
         let known = self.panels.get(&id).is_some_and(|p| p.owner == owner.id);
         if !state.visible || state.cloaked || state.show_state != ShowState::Normal {
             if let Some(panel) = self.panels.get_mut(&id).filter(|_| known) {
@@ -621,7 +717,12 @@ impl Engine {
             // Re-shown by the app: follow the zone again unless the user already moved it.
             Some(_) if panel.hidden => !panel.user_moved,
             // Resized in place (content relayout), not dragged.
-            Some(last) if (last.width(), last.height()) != (state.bounds.width(), state.bounds.height()) => false,
+            Some(last)
+                if (last.width(), last.height())
+                    != (state.bounds.width(), state.bounds.height()) =>
+            {
+                false
+            }
             Some(_) => {
                 panel.user_moved = true;
                 false
@@ -657,13 +758,29 @@ impl Engine {
         false
     }
 
-    fn start_animation(&mut self, id: WindowId, kind: AnimationKind, from: Rect, to: Rect, duration: Duration) {
+    fn start_animation(
+        &mut self,
+        id: WindowId,
+        kind: AnimationKind,
+        from: Rect,
+        to: Rect,
+        duration: Duration,
+    ) {
         // Movement starts after the delay; the first step then checks nothing moved meanwhile.
         let started = Instant::now() + START_DELAY;
         self.pending.remove(&id);
         self.animations.insert(
             id,
-            Animation { kind, from, to, started, duration, next_step: started, last_set: from, restarts: 0 },
+            Animation {
+                kind,
+                from,
+                to,
+                started,
+                duration,
+                next_step: started,
+                last_set: from,
+                restarts: 0,
+            },
         );
     }
 
@@ -680,11 +797,18 @@ impl Engine {
             }
         };
         let now = Instant::now();
-        let Some(anim) = self.animations.get(&id) else { return };
+        let Some(anim) = self.animations.get(&id) else {
+            return;
+        };
         if !state.bounds.approx_eq(&anim.last_set, ANIMATION_TOLERANCE) {
             return self.on_animation_interrupted(id, state, now);
         }
-        let (rect, done) = frame_at(anim.from, anim.to, now.saturating_duration_since(anim.started), anim.duration);
+        let (rect, done) = frame_at(
+            anim.from,
+            anim.to,
+            now.saturating_duration_since(anim.started),
+            anim.duration,
+        );
         if done {
             if let Some(anim) = self.animations.remove(&id) {
                 self.finish_animation(id, anim);
@@ -709,12 +833,16 @@ impl Engine {
     /// Something other than the animation moved the window.
     fn on_animation_interrupted(&mut self, id: WindowId, state: WindowState, now: Instant) {
         let reasserted = fullscreen_monitor(&state, &self.monitors).is_some();
-        let Some(anim) = self.animations.get_mut(&id) else { return };
+        let Some(anim) = self.animations.get_mut(&id) else {
+            return;
+        };
         match anim.kind {
             // Chromium finishes its own fullscreen transition a few hundred ms in and puts the
             // window back on the monitor rect. Carry on from there instead of starting over.
             AnimationKind::Enter(_) if reasserted && anim.restarts < MAX_ANIMATION_RESTARTS => {
-                let remaining = anim.duration.saturating_sub(now.saturating_duration_since(anim.started));
+                let remaining = anim
+                    .duration
+                    .saturating_sub(now.saturating_duration_since(anim.started));
                 anim.from = state.bounds;
                 anim.last_set = state.bounds;
                 anim.started = now;
@@ -738,7 +866,9 @@ impl Engine {
     fn finish_animation(&mut self, id: WindowId, anim: Animation) {
         match anim.kind {
             AnimationKind::Enter(plan) => {
-                let Some(mut m) = self.managed.remove(&id) else { return };
+                let Some(mut m) = self.managed.remove(&id) else {
+                    return;
+                };
                 let who = label(&m.identity, id);
                 match self.finish_zone(&mut m, &plan) {
                     Ok(msg) => {
@@ -785,7 +915,9 @@ impl Engine {
             Err(PlatformError::WindowGone(_)) => return self.forget(id),
             Err(e) => return tracing::debug!(window = %id, "state read failed: {e}"),
         };
-        let Some(m) = self.managed.get(&id) else { return };
+        let Some(m) = self.managed.get(&id) else {
+            return;
+        };
         match classify_managed(&state, &m.applied, &self.monitors) {
             ManagedObservation::Unchanged | ManagedObservation::Dormant => {}
             ManagedObservation::Refullscreened => self.reapply(id, state),
@@ -795,13 +927,16 @@ impl Engine {
 
     /// The app re-asserted fullscreen (monitor move, display change, or fighting us).
     fn reapply(&mut self, id: WindowId, state: WindowState) {
-        let Some(mut m) = self.managed.remove(&id) else { return };
+        let Some(mut m) = self.managed.remove(&id) else {
+            return;
+        };
         if m.gave_up {
             self.managed.insert(id, m);
             return;
         }
         let now = Instant::now();
-        m.reapplies.retain(|t| now.duration_since(*t) < REAPPLY_WINDOW);
+        m.reapplies
+            .retain(|t| now.duration_since(*t) < REAPPLY_WINDOW);
         m.reapplies.push_back(now);
         let who = label(&m.identity, id);
         if m.reapplies.len() > MAX_REAPPLIES {
@@ -828,7 +963,11 @@ impl Engine {
             }
             Err(e) => {
                 self.rejected.insert(id);
-                self.log(ActivityLevel::Warn, Some(who), format!("Could not re-apply zone: {e}"));
+                self.log(
+                    ActivityLevel::Warn,
+                    Some(who),
+                    format!("Could not re-apply zone: {e}"),
+                );
                 self.save_journal();
             }
         }
@@ -839,7 +978,9 @@ impl Engine {
     /// fullscreen window, so exiting comes back smaller than the window the user had. Put that
     /// window back ourselves.
     fn release_after_exit(&mut self, id: WindowId, current: WindowState) {
-        let Some(m) = self.managed.remove(&id) else { return };
+        let Some(m) = self.managed.remove(&id) else {
+            return;
+        };
         self.animations.remove(&id);
         self.forget_panels_of(id);
         let who = label(&m.identity, id);
@@ -860,13 +1001,23 @@ impl Engine {
                     tracing::warn!(window = %id, "could not restore topmost: {e}");
                 }
                 let to = pre.bounds;
-                self.start_animation(id, AnimationKind::Exit { pre, who }, current.bounds, to, duration);
+                self.start_animation(
+                    id,
+                    AnimationKind::Exit { pre, who },
+                    current.bounds,
+                    to,
+                    duration,
+                );
             }
         } else {
             let topmost = m.detected.topmost;
             self.restore_taskbar(id, topmost);
             tracing::info!(window = %who, bounds = %current.bounds, "fullscreen exited without a saved window");
-            self.log(ActivityLevel::Info, Some(who), format!("Fullscreen exited; released at {}", current.bounds));
+            self.log(
+                ActivityLevel::Info,
+                Some(who),
+                format!("Fullscreen exited; released at {}", current.bounds),
+            );
             self.last_normal.insert(id, current);
         }
         self.save_journal();
@@ -876,15 +1027,25 @@ impl Engine {
     /// Puts the pre-fullscreen window back (styles, bounds, maximized state, z-order).
     fn finish_exit(&mut self, id: WindowId, pre: WindowState, who: String) {
         match self.platform.restore_state(id, &pre) {
-            Ok(()) => self.log(ActivityLevel::Info, Some(who), format!("Fullscreen exited; restored {}", pre.bounds)),
-            Err(e) => self.log(ActivityLevel::Warn, Some(who), format!("Fullscreen exited but could not restore: {e}")),
+            Ok(()) => self.log(
+                ActivityLevel::Info,
+                Some(who),
+                format!("Fullscreen exited; restored {}", pre.bounds),
+            ),
+            Err(e) => self.log(
+                ActivityLevel::Warn,
+                Some(who),
+                format!("Fullscreen exited but could not restore: {e}"),
+            ),
         }
         self.last_normal.insert(id, pre);
     }
 
     /// Hands a still-fullscreen window back to the app's own fullscreen state.
     fn release(&mut self, id: WindowId, reason: ReleaseReason) {
-        let Some(m) = self.managed.remove(&id) else { return };
+        let Some(m) = self.managed.remove(&id) else {
+            return;
+        };
         self.forget_panels_of(id);
         let who = label(&m.identity, id);
         // Mid-shrink the window is neither at its fullscreen rect nor in the zone, but it is ours.
@@ -907,9 +1068,17 @@ impl Engine {
                     if let Err(e) = self.platform.set_hides_taskbar(id, true) {
                         tracing::warn!(window = %id, "could not mark released fullscreen window: {e}");
                     }
-                    self.log(ActivityLevel::Info, Some(who), format!("Released ({reason:?}); restored {}", m.detected.bounds));
+                    self.log(
+                        ActivityLevel::Info,
+                        Some(who),
+                        format!("Released ({reason:?}); restored {}", m.detected.bounds),
+                    );
                 }
-                Err(e) => self.log(ActivityLevel::Warn, Some(who), format!("Release ({reason:?}) could not restore: {e}")),
+                Err(e) => self.log(
+                    ActivityLevel::Warn,
+                    Some(who),
+                    format!("Release ({reason:?}) could not restore: {e}"),
+                ),
             }
         }
         // Suppress immediate re-capture of the (still fullscreen) window.
@@ -926,7 +1095,9 @@ impl Engine {
     }
 
     fn on_user_moved(&mut self, id: WindowId) {
-        let Some(m) = self.managed.get_mut(&id) else { return };
+        let Some(m) = self.managed.get_mut(&id) else {
+            return;
+        };
         if let Ok(state) = self.platform.state(id) {
             // Respect manual placement while still considering the window managed.
             tracing::info!(window = %id, bounds = %state.bounds, "user moved managed window");
@@ -949,7 +1120,11 @@ impl Engine {
         self.last_normal.remove(&id);
         self.rejected.remove(&id);
         if let Some(m) = self.managed.remove(&id) {
-            self.log(ActivityLevel::Info, Some(label(&m.identity, id)), "Window closed while managed".into());
+            self.log(
+                ActivityLevel::Info,
+                Some(label(&m.identity, id)),
+                "Window closed while managed".into(),
+            );
             self.save_journal();
             (self.notify)(Notification::ManagedChanged);
         }
@@ -958,24 +1133,40 @@ impl Engine {
     fn on_display_changed(&mut self) {
         self.refresh_monitors();
         (self.notify)(Notification::MonitorsChanged(self.monitors.clone()));
-        self.log(ActivityLevel::Info, None, format!("Display configuration changed ({} monitors)", self.monitors.len()));
+        self.log(
+            ActivityLevel::Info,
+            None,
+            format!(
+                "Display configuration changed ({} monitors)",
+                self.monitors.len()
+            ),
+        );
         self.reapply_all();
     }
 
     fn reapply_all(&mut self) {
         let ids: Vec<WindowId> = self.managed.keys().copied().collect();
         for id in ids {
-            let Some(mut m) = self.managed.remove(&id) else { continue };
+            let Some(mut m) = self.managed.remove(&id) else {
+                continue;
+            };
             self.animations.remove(&id);
             let Ok(state) = self.platform.state(id) else {
                 self.forget(id);
                 continue;
             };
             // If the monitor the app went fullscreen on is gone, hand back fullscreen on its current one.
-            let detected_monitor_alive =
-                m.detected.monitor.as_ref().is_some_and(|mid| self.monitors.iter().any(|x| &x.id == mid));
+            let detected_monitor_alive = m
+                .detected
+                .monitor
+                .as_ref()
+                .is_some_and(|mid| self.monitors.iter().any(|x| &x.id == mid));
             if !detected_monitor_alive {
-                if let Some(cur) = state.monitor.as_ref().and_then(|mid| self.monitors.iter().find(|x| &x.id == mid)) {
+                if let Some(cur) = state
+                    .monitor
+                    .as_ref()
+                    .and_then(|mid| self.monitors.iter().find(|x| &x.id == mid))
+                {
                     m.detected.bounds = cur.bounds;
                     m.detected.monitor = Some(cur.id.clone());
                 }
@@ -983,7 +1174,11 @@ impl Engine {
             m.gave_up = false;
             m.reapplies.clear();
             if let Err(e) = self.apply_zone(&mut m, state.monitor.as_ref()) {
-                self.log(ActivityLevel::Warn, Some(label(&m.identity, id)), format!("Could not re-apply zone: {e}"));
+                self.log(
+                    ActivityLevel::Warn,
+                    Some(label(&m.identity, id)),
+                    format!("Could not re-apply zone: {e}"),
+                );
             }
             self.managed.insert(id, m);
         }
@@ -995,7 +1190,11 @@ impl Engine {
         match self.platform.monitors() {
             Ok(m) => self.monitors = m,
             Err(e) => {
-                self.activity.push(ActivityLevel::Error, None, format!("Monitor discovery failed: {e}"));
+                self.activity.push(
+                    ActivityLevel::Error,
+                    None,
+                    format!("Monitor discovery failed: {e}"),
+                );
             }
         }
     }
@@ -1063,7 +1262,10 @@ impl Engine {
 
     pub fn list_windows(&mut self) -> Result<Vec<WindowInfo>, String> {
         self.refresh_monitors();
-        let ids = self.platform.enumerate_windows().map_err(|e| e.to_string())?;
+        let ids = self
+            .platform
+            .enumerate_windows()
+            .map_err(|e| e.to_string())?;
         Ok(ids
             .into_iter()
             .filter_map(|id| {
@@ -1112,24 +1314,37 @@ impl Engine {
                 .then(|| self.config.match_rule(&self.managed[&id].identity))
                 .flatten()
                 .and_then(|r| {
-                    r.fullscreen_action()
-                        .map(|a| (r.id.clone(), a.zone_id.to_string(), a.chrome, a.use_snapped_zone))
+                    r.fullscreen_action().map(|a| {
+                        (
+                            r.id.clone(),
+                            a.zone_id.to_string(),
+                            a.chrome,
+                            a.use_snapped_zone,
+                        )
+                    })
                 });
             let Some((rule_id, zone_id, chrome, use_snapped_zone)) = action else {
                 self.release(id, ReleaseReason::ConfigChanged);
                 continue;
             };
-            let Some(mut m) = self.managed.remove(&id) else { continue };
+            let Some(mut m) = self.managed.remove(&id) else {
+                continue;
+            };
             self.animations.remove(&id);
             if m.chrome == ChromeMode::Hide && chrome == ChromeMode::Keep {
                 let _ = self.platform.set_style(id, m.detected.style);
             }
-            (m.rule_id, m.zone_id, m.chrome, m.use_snapped_zone) = (rule_id, zone_id, chrome, use_snapped_zone);
+            (m.rule_id, m.zone_id, m.chrome, m.use_snapped_zone) =
+                (rule_id, zone_id, chrome, use_snapped_zone);
             m.gave_up = false;
             m.reapplies.clear();
             let monitor = m.monitor.clone();
             if let Err(e) = self.apply_zone(&mut m, monitor.as_ref()) {
-                self.log(ActivityLevel::Warn, Some(label(&m.identity, id)), format!("Could not apply updated zone: {e}"));
+                self.log(
+                    ActivityLevel::Warn,
+                    Some(label(&m.identity, id)),
+                    format!("Could not apply updated zone: {e}"),
+                );
             }
             self.managed.insert(id, m);
         }

@@ -95,7 +95,7 @@ by design; measure) · 18. Generic structure ✅
 1. Manual matrix for Chrome, Firefox, HTML5 video fullscreen (YouTube), exit via Esc/F11.
 2. Multi-monitor + negative coordinates + mixed DPI.
 3. Measure idle CPU; review `EVENT_OBJECT_LOCATIONCHANGE` volume.
-4. Tray icon + close-to-tray 🧪 (Exit on the tray menu quits; autostart still open).
+4. Tray icon + close-to-tray 🧪 (Exit on the tray menu quits). **Start at boot** in Settings registers a Windows login item (tray only; window stays hidden) 🧪.
 5. Real-fullscreen flash: shortened by applying immediately 🧪. Cross-process DWM cloak is denied
    (verified), so removing it entirely needs an in-process hook DLL. Requested as an opt-in
    setting (default off); not built yet (Chromium may block third-party DLLs; needs its own design).

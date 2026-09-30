@@ -14,7 +14,12 @@ pub struct NormalizedRect {
 }
 
 impl NormalizedRect {
-    pub const FULL: NormalizedRect = NormalizedRect { x: 0.0, y: 0.0, width: 1.0, height: 1.0 };
+    pub const FULL: NormalizedRect = NormalizedRect {
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+    };
 
     /// Clamps into the unit square and enforces a minimum size so a zone can never collapse.
     pub fn sanitized(self) -> NormalizedRect {
@@ -24,7 +29,12 @@ impl NormalizedRect {
         let height = finite(self.height, 1.0).clamp(MIN, 1.0);
         let x = finite(self.x, 0.0).clamp(0.0, 1.0 - width);
         let y = finite(self.y, 0.0).clamp(0.0, 1.0 - height);
-        NormalizedRect { x, y, width, height }
+        NormalizedRect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Maps onto `reference` in physical pixels. Edges are rounded independently so adjacent
@@ -152,13 +162,21 @@ mod tests {
     use crate::core::monitor::test_monitor;
 
     fn nr(x: f64, y: f64, width: f64, height: f64) -> NormalizedRect {
-        NormalizedRect { x, y, width, height }
+        NormalizedRect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     #[test]
     fn resolves_left_75_on_super_ultrawide() {
         let monitor = Rect::new(0, 0, 5120, 1440);
-        assert_eq!(nr(0.0, 0.0, 0.75, 1.0).resolve(&monitor), Rect::new(0, 0, 3840, 1440));
+        assert_eq!(
+            nr(0.0, 0.0, 0.75, 1.0).resolve(&monitor),
+            Rect::new(0, 0, 3840, 1440)
+        );
     }
 
     #[test]
@@ -176,7 +194,10 @@ mod tests {
     #[test]
     fn resolves_with_negative_origin() {
         let monitor = Rect::new(-2560, -1440, 0, 0);
-        assert_eq!(nr(0.5, 0.5, 0.5, 0.5).resolve(&monitor), Rect::new(-1280, -720, 0, 0));
+        assert_eq!(
+            nr(0.5, 0.5, 0.5, 0.5).resolve(&monitor),
+            Rect::new(-1280, -720, 0, 0)
+        );
     }
 
     #[test]
@@ -205,20 +226,34 @@ mod tests {
     }
 
     fn px(x: i32, y: i32, width: i32, height: i32) -> PixelRect {
-        PixelRect { x, y, width, height }
+        PixelRect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     #[test]
     fn pixel_zone_is_offset_from_reference_origin() {
         let monitor = Rect::new(-5120, 0, 0, 1440);
-        assert_eq!(px(640, 0, 3840, 1440).resolve(&monitor), Rect::new(-4480, 0, -640, 1440));
+        assert_eq!(
+            px(640, 0, 3840, 1440).resolve(&monitor),
+            Rect::new(-4480, 0, -640, 1440)
+        );
     }
 
     #[test]
     fn pixel_zone_shrinks_and_shifts_to_fit_smaller_monitor() {
         let monitor = Rect::new(0, 0, 1920, 1080);
-        assert_eq!(px(1000, 0, 3840, 1440).resolve(&monitor), Rect::new(0, 0, 1920, 1080));
-        assert_eq!(px(1500, 100, 1000, 500).resolve(&monitor), Rect::new(920, 100, 1920, 600));
+        assert_eq!(
+            px(1000, 0, 3840, 1440).resolve(&monitor),
+            Rect::new(0, 0, 1920, 1080)
+        );
+        assert_eq!(
+            px(1500, 100, 1000, 500).resolve(&monitor),
+            Rect::new(920, 100, 1920, 600)
+        );
     }
 
     #[test]
@@ -258,9 +293,21 @@ mod tests {
             monitor: Some(MonitorId("b".into())),
             reference: ZoneReference::Monitor,
         };
-        assert_eq!(zone.target_monitor(&monitors, Some(&monitors[0])).unwrap().id.0, "b");
+        assert_eq!(
+            zone.target_monitor(&monitors, Some(&monitors[0]))
+                .unwrap()
+                .id
+                .0,
+            "b"
+        );
         zone.monitor = Some(MonitorId("gone".into()));
-        assert_eq!(zone.target_monitor(&monitors, Some(&monitors[0])).unwrap().id.0, "a");
+        assert_eq!(
+            zone.target_monitor(&monitors, Some(&monitors[0]))
+                .unwrap()
+                .id
+                .0,
+            "a"
+        );
     }
 
     #[test]

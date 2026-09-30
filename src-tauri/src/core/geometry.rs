@@ -12,7 +12,12 @@ pub struct Rect {
 
 impl Rect {
     pub const fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
-        Self { left, top, right, bottom }
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
     }
 
     pub const fn from_xywh(x: i32, y: i32, width: i32, height: i32) -> Self {
@@ -77,7 +82,14 @@ impl Rect {
 
 impl std::fmt::Display for Rect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {}) {}x{}", self.left, self.top, self.width(), self.height())
+        write!(
+            f,
+            "({}, {}) {}x{}",
+            self.left,
+            self.top,
+            self.width(),
+            self.height()
+        )
     }
 }
 
@@ -134,7 +146,15 @@ mod tests {
         let visible = Rect::new(100, 100, 900, 700);
         let window = Rect::new(93, 100, 907, 707);
         let insets = Insets::between(&window, &visible);
-        assert_eq!(insets, Insets { left: 7, top: 0, right: 7, bottom: 7 });
+        assert_eq!(
+            insets,
+            Insets {
+                left: 7,
+                top: 0,
+                right: 7,
+                bottom: 7
+            }
+        );
         assert_eq!(visible.expand(insets), window);
     }
 }

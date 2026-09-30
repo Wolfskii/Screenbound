@@ -29,13 +29,23 @@ pub struct ActivityLog {
 }
 
 impl ActivityLog {
-    pub fn push(&mut self, level: ActivityLevel, window: Option<String>, message: String) -> ActivityEntry {
+    pub fn push(
+        &mut self,
+        level: ActivityLevel,
+        window: Option<String>,
+        message: String,
+    ) -> ActivityEntry {
         match level {
             ActivityLevel::Info => tracing::info!(window = window.as_deref(), "{message}"),
             ActivityLevel::Warn => tracing::warn!(window = window.as_deref(), "{message}"),
             ActivityLevel::Error => tracing::error!(window = window.as_deref(), "{message}"),
         }
-        let entry = ActivityEntry { timestamp_ms: now_ms(), level, window, message };
+        let entry = ActivityEntry {
+            timestamp_ms: now_ms(),
+            level,
+            window,
+            message,
+        };
         if self.entries.len() == CAPACITY {
             self.entries.pop_front();
         }
@@ -49,5 +59,7 @@ impl ActivityLog {
 }
 
 pub fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }

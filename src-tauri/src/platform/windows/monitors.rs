@@ -31,14 +31,22 @@ pub(super) fn enumerate() -> PlatformResult<Vec<MonitorInfo>> {
         BOOL(1)
     }
     let ok = unsafe {
-        EnumDisplayMonitors(None, None, Some(collect), LPARAM(&mut handles as *mut _ as isize))
+        EnumDisplayMonitors(
+            None,
+            None,
+            Some(collect),
+            LPARAM(&mut handles as *mut _ as isize),
+        )
     };
     if !ok.as_bool() {
         return Err(native_error("EnumDisplayMonitors"));
     }
 
     let names = display_names().unwrap_or_default();
-    let mut monitors: Vec<MonitorInfo> = handles.into_iter().filter_map(|h| describe(h, &names)).collect();
+    let mut monitors: Vec<MonitorInfo> = handles
+        .into_iter()
+        .filter_map(|h| describe(h, &names))
+        .collect();
     monitors.sort_by_key(|m| (m.number, m.bounds.left, m.bounds.top));
     Ok(monitors)
 }
@@ -101,8 +109,9 @@ fn display_names() -> Option<HashMap<String, DisplayNames>> {
     let mut attempts = 0;
     loop {
         attempts += 1;
-        if unsafe { GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut path_count, &mut mode_count) }
-            != ERROR_SUCCESS
+        if unsafe {
+            GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut path_count, &mut mode_count)
+        } != ERROR_SUCCESS
         {
             return None;
         }
@@ -147,10 +156,11 @@ fn display_names() -> Option<HashMap<String, DisplayNames>> {
             continue;
         }
 
-        out.entry(from_wide(&source.viewGdiDeviceName)).or_insert(DisplayNames {
-            friendly: from_wide(&target.monitorFriendlyDeviceName),
-            device_path: from_wide(&target.monitorDevicePath),
-        });
+        out.entry(from_wide(&source.viewGdiDeviceName))
+            .or_insert(DisplayNames {
+                friendly: from_wide(&target.monitorFriendlyDeviceName),
+                device_path: from_wide(&target.monitorDevicePath),
+            });
     }
     Some(out)
 }

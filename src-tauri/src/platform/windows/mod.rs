@@ -45,12 +45,17 @@ pub struct WindowsPlatform {
 
 impl WindowsPlatform {
     pub fn new() -> Self {
-        Self { own_pid: std::process::id(), monitor_ids: Mutex::new(HashMap::new()) }
+        Self {
+            own_pid: std::process::id(),
+            monitor_ids: Mutex::new(HashMap::new()),
+        }
     }
 
     fn monitor_id_for(&self, device_name: String) -> MonitorId {
         let ids = self.monitor_ids.lock().unwrap_or_else(|e| e.into_inner());
-        ids.get(&device_name).cloned().unwrap_or(MonitorId(device_name))
+        ids.get(&device_name)
+            .cloned()
+            .unwrap_or(MonitorId(device_name))
     }
 }
 
@@ -59,7 +64,11 @@ impl PlatformWindowManager for WindowsPlatform {
         let monitors = monitors::enumerate()?;
         let mut ids = self.monitor_ids.lock().unwrap_or_else(|e| e.into_inner());
         ids.clear();
-        ids.extend(monitors.iter().map(|m| (m.device_name.clone(), m.id.clone())));
+        ids.extend(
+            monitors
+                .iter()
+                .map(|m| (m.device_name.clone(), m.id.clone())),
+        );
         Ok(monitors)
     }
 
@@ -133,7 +142,12 @@ pub(crate) fn to_rect(r: RECT) -> Rect {
 }
 
 pub(crate) fn to_win_rect(r: Rect) -> RECT {
-    RECT { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+    RECT {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+    }
 }
 
 pub(crate) fn from_wide(buf: &[u16]) -> String {
@@ -145,17 +159,29 @@ pub(crate) fn from_wide(buf: &[u16]) -> String {
 pub(crate) fn native_error(op: &'static str) -> PlatformError {
     let code = unsafe { GetLastError() };
     let err = windows::core::Error::from_hresult(code.to_hresult());
-    PlatformError::Native { op, code: code.0 as i32, message: err.message() }
+    PlatformError::Native {
+        op,
+        code: code.0 as i32,
+        message: err.message(),
+    }
 }
 
 /// Maps a failed call on a specific window to the most useful error variant.
-pub(crate) fn window_error(id: WindowId, op: &'static str, err: windows::core::Error) -> PlatformError {
+pub(crate) fn window_error(
+    id: WindowId,
+    op: &'static str,
+    err: windows::core::Error,
+) -> PlatformError {
     if !window::exists(id) {
         PlatformError::WindowGone(id)
     } else if err.code() == ERROR_ACCESS_DENIED.to_hresult() {
         PlatformError::AccessDenied(id)
     } else {
-        PlatformError::Native { op, code: err.code().0, message: err.message() }
+        PlatformError::Native {
+            op,
+            code: err.code().0,
+            message: err.message(),
+        }
     }
 }
 
@@ -176,7 +202,14 @@ mod desktop_tests {
         for m in &monitors {
             println!(
                 "#{} {} [{}] bounds={} work={} dpi={} primary={} id={}",
-                m.number, m.friendly_name, m.device_name, m.bounds, m.work_area, m.dpi, m.is_primary, m.id.0
+                m.number,
+                m.friendly_name,
+                m.device_name,
+                m.bounds,
+                m.work_area,
+                m.dpi,
+                m.is_primary,
+                m.id.0
             );
             assert!(!m.bounds.is_empty());
             assert!(m.bounds.contains_rect(&m.work_area));
@@ -184,7 +217,9 @@ mod desktop_tests {
         let windows = p.enumerate_windows().expect("windows");
         assert!(!windows.is_empty());
         for id in windows {
-            let (Ok(ident), Ok(state)) = (p.identity(id), p.state(id)) else { continue };
+            let (Ok(ident), Ok(state)) = (p.identity(id), p.state(id)) else {
+                continue;
+            };
             println!(
                 "{id} {:<20} {:<28} {:<40.40} {} vis={} max={:?} caption={} fs={} fancyzones={}",
                 ident.process_name,
@@ -206,7 +241,9 @@ mod desktop_tests {
     #[ignore = "requires an interactive Windows desktop"]
     fn probe_cross_process_cloak() {
         init_process();
-        let mut child = std::process::Command::new("winver.exe").spawn().expect("spawn winver");
+        let mut child = std::process::Command::new("winver.exe")
+            .spawn()
+            .expect("spawn winver");
         let mut hwnd = None;
         for _ in 0..40 {
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -223,7 +260,8 @@ mod desktop_tests {
         });
         let _ = child.kill();
         let _ = child.wait();
-        let (set, cloaked_after_set, clear, cloaked_after_clear) = result.expect("winver window not found");
+        let (set, cloaked_after_set, clear, cloaked_after_clear) =
+            result.expect("winver window not found");
         println!("cloak: {set:?} -> cloaked={cloaked_after_set}; uncloak: {clear:?} -> cloaked={cloaked_after_clear}");
         assert!(!cloaked_after_clear, "window left cloaked");
     }

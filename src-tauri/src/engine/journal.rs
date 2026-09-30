@@ -56,7 +56,10 @@ mod tests {
         let path = dir.join("managed.json");
         let entry = JournalEntry {
             window: WindowId(0x1234),
-            process: ProcessRef { pid: 42, start_time: 7 },
+            process: ProcessRef {
+                pid: 42,
+                start_time: 7,
+            },
             process_name: "chrome.exe".into(),
             detected: test_state(Rect::new(0, 0, 5120, 1440)),
             applied: test_state(Rect::new(0, 0, 3840, 1440)),

@@ -1,7 +1,8 @@
 //! Tauri command surface. Thin: validates/forwards to the engine thread and returns JSON.
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
+use crate::autostart;
 use crate::core::config::AppConfig;
 use crate::core::monitor::MonitorInfo;
 use crate::core::window::{WindowId, WindowInfo};
@@ -21,8 +22,15 @@ pub async fn get_config(engine: State<'_, EngineHandle>) -> CmdResult<AppConfig>
 }
 
 #[tauri::command]
-pub async fn set_config(engine: State<'_, EngineHandle>, config: AppConfig) -> CmdResult<AppConfig> {
-    engine.call(move |e| e.set_config(config))?
+pub async fn set_config(
+    app: AppHandle,
+    engine: State<'_, EngineHandle>,
+    config: AppConfig,
+) -> CmdResult<AppConfig> {
+    let start_at_boot = config.start_at_boot;
+    let updated = engine.call(move |e| e.set_config(config))??;
+    autostart::sync(&app, start_at_boot)?;
+    Ok(updated)
 }
 
 #[tauri::command]

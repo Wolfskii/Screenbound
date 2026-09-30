@@ -72,7 +72,13 @@ mod tests {
         assert_eq!(monitor_for_rect(&monitors, &on_left).unwrap().id.0, "left");
 
         let straddling_mostly_main = Rect::new(-100, 0, 2000, 1000);
-        assert_eq!(monitor_for_rect(&monitors, &straddling_mostly_main).unwrap().id.0, "main");
+        assert_eq!(
+            monitor_for_rect(&monitors, &straddling_mostly_main)
+                .unwrap()
+                .id
+                .0,
+            "main"
+        );
 
         let off_screen = Rect::new(10_000, 10_000, 10_100, 10_100);
         assert!(monitor_for_rect(&monitors, &off_screen).is_none());

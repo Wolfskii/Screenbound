@@ -14,10 +14,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     PeekMessageW, PostThreadMessageW, RegisterClassW, TranslateMessage, CHILDID_SELF,
     EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW,
     EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART,
-    EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, GA_ROOT, MSG, OBJID_WINDOW,
-    PM_NOREMOVE, SPI_SETWORKAREA, WINDOW_EX_STYLE, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
-    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_QUIT, WM_SETTINGCHANGE, WM_USER, WNDCLASSW, WS_EX_TOOLWINDOW,
-    WS_OVERLAPPED,
+    EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, GA_ROOT, MSG, OBJID_WINDOW, PM_NOREMOVE,
+    SPI_SETWORKAREA, WINDOW_EX_STYLE, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_QUIT, WM_SETTINGCHANGE, WM_USER, WNDCLASSW,
+    WS_EX_TOOLWINDOW, WS_OVERLAPPED,
 };
 
 use super::window::window_id;
@@ -41,12 +41,24 @@ pub(super) fn subscribe(sink: EventSink) -> PlatformResult<EventSubscription> {
     let thread = std::thread::Builder::new()
         .name("screenbound-winevents".into())
         .spawn(move || run(sink, ready_tx))
-        .map_err(|e| PlatformError::Native { op: "spawn event thread", code: 0, message: e.to_string() })?;
+        .map_err(|e| PlatformError::Native {
+            op: "spawn event thread",
+            code: 0,
+            message: e.to_string(),
+        })?;
 
     let thread_id = ready_rx
         .recv()
-        .map_err(|_| PlatformError::Native { op: "event thread startup", code: 0, message: "thread exited".into() })?
-        .map_err(|message| PlatformError::Native { op: "event thread startup", code: 0, message })?;
+        .map_err(|_| PlatformError::Native {
+            op: "event thread startup",
+            code: 0,
+            message: "thread exited".into(),
+        })?
+        .map_err(|message| PlatformError::Native {
+            op: "event thread startup",
+            code: 0,
+            message,
+        })?;
 
     Ok(EventSubscription::new(move || {
         unsafe {
@@ -145,8 +157,12 @@ unsafe extern "system" fn win_event_proc(
         EVENT_OBJECT_DESTROY => PlatformEvent::WindowDestroyed(id),
         EVENT_SYSTEM_MOVESIZESTART => PlatformEvent::MoveSizeStart(id),
         EVENT_SYSTEM_MOVESIZEEND => PlatformEvent::MoveSizeEnd(id),
-        EVENT_OBJECT_SHOW | EVENT_OBJECT_HIDE | EVENT_OBJECT_LOCATIONCHANGE | EVENT_SYSTEM_FOREGROUND
-        | EVENT_SYSTEM_MINIMIZESTART | EVENT_SYSTEM_MINIMIZEEND => {
+        EVENT_OBJECT_SHOW
+        | EVENT_OBJECT_HIDE
+        | EVENT_OBJECT_LOCATIONCHANGE
+        | EVENT_SYSTEM_FOREGROUND
+        | EVENT_SYSTEM_MINIMIZESTART
+        | EVENT_SYSTEM_MINIMIZEEND => {
             if unsafe { GetAncestor(hwnd, GA_ROOT) } != hwnd {
                 return;
             }
@@ -187,10 +203,17 @@ fn create_display_window() -> Option<HWND> {
     .ok()
 }
 
-unsafe extern "system" fn display_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn display_wndproc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     match msg {
         WM_DISPLAYCHANGE | WM_DPICHANGED => emit(PlatformEvent::DisplayChanged),
-        WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => emit(PlatformEvent::DisplayChanged),
+        WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => {
+            emit(PlatformEvent::DisplayChanged)
+        }
         _ => {}
     }
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }

@@ -42,7 +42,12 @@ pub fn ease_in(t: f64) -> f64 {
 pub fn interpolate(from: Rect, to: Rect, progress: f64) -> Rect {
     let p = progress.clamp(0.0, 1.0);
     let lerp = |a: i32, b: i32| (f64::from(a) + (f64::from(b) - f64::from(a)) * p).round() as i32;
-    Rect::new(lerp(from.left, to.left), lerp(from.top, to.top), lerp(from.right, to.right), lerp(from.bottom, to.bottom))
+    Rect::new(
+        lerp(from.left, to.left),
+        lerp(from.top, to.top),
+        lerp(from.right, to.right),
+        lerp(from.bottom, to.bottom),
+    )
 }
 
 /// The rect to show `elapsed` into a transition of `duration`, and whether it is the last step.
@@ -81,7 +86,11 @@ mod tests {
         assert_eq!(interpolate(FULL, ZONE, 0.0), FULL);
         assert_eq!(interpolate(FULL, ZONE, 1.0), ZONE);
         assert_eq!(interpolate(FULL, ZONE, 0.5), Rect::new(0, 0, 4480, 1440));
-        let moved = interpolate(Rect::new(-1920, 0, 0, 1080), Rect::new(100, 100, 900, 700), 0.5);
+        let moved = interpolate(
+            Rect::new(-1920, 0, 0, 1080),
+            Rect::new(100, 100, 900, 700),
+            0.5,
+        );
         assert_eq!(moved, Rect::new(-910, 50, 450, 890));
     }
 
@@ -94,6 +103,14 @@ mod tests {
         // A quarter of the way at half time: slow start.
         assert_eq!(mid.right, 4800);
         assert_eq!(frame_at(FULL, ZONE, d, d), (ZONE, true));
-        assert_eq!(frame_at(FULL, ZONE, Duration::ZERO, TransitionSpeed::Instant.duration()), (ZONE, true));
+        assert_eq!(
+            frame_at(
+                FULL,
+                ZONE,
+                Duration::ZERO,
+                TransitionSpeed::Instant.duration()
+            ),
+            (ZONE, true)
+        );
     }
 }

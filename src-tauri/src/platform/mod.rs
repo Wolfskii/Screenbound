@@ -5,10 +5,10 @@ use crate::core::geometry::Rect;
 use crate::core::monitor::MonitorInfo;
 use crate::core::window::{NativeStyle, WindowId, WindowIdentity, WindowState};
 
-#[cfg(windows)]
-mod windows;
 #[cfg(not(windows))]
 mod unsupported;
+#[cfg(windows)]
+mod windows;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PlatformError {
@@ -19,7 +19,11 @@ pub enum PlatformError {
     #[error("window {0} is not responding")]
     Hung(WindowId),
     #[error("{op} failed: {message} (code {code})")]
-    Native { op: &'static str, code: i32, message: String },
+    Native {
+        op: &'static str,
+        code: i32,
+        message: String,
+    },
     #[error("not supported on this platform")]
     #[cfg_attr(windows, allow(dead_code))]
     Unsupported,
@@ -50,7 +54,9 @@ pub struct EventSubscription {
 
 impl EventSubscription {
     pub fn new(stop: impl FnOnce() + Send + 'static) -> Self {
-        Self { stop: Some(Box::new(stop)) }
+        Self {
+            stop: Some(Box::new(stop)),
+        }
     }
 }
 

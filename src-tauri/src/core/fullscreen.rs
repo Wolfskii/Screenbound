@@ -13,7 +13,10 @@ pub const BOUNDS_TOLERANCE: i32 = 2;
 /// F11 fullscreen on Windows (same top-level HWND, caption/frame stripped, bounds = monitor),
 /// and it also matches borderless-windowed games/players. Exclusive (DXGI/D3D) fullscreen
 /// can look identical but cannot be controlled this way; see docs/fullscreen-research.md.
-pub fn fullscreen_monitor<'a>(state: &WindowState, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
+pub fn fullscreen_monitor<'a>(
+    state: &WindowState,
+    monitors: &'a [MonitorInfo],
+) -> Option<&'a MonitorInfo> {
     if !state.visible || state.cloaked || state.show_state != ShowState::Normal {
         return None;
     }
@@ -21,7 +24,10 @@ pub fn fullscreen_monitor<'a>(state: &WindowState, monitors: &'a [MonitorInfo]) 
         return None;
     }
     let monitor = monitor_for_rect(monitors, &state.bounds)?;
-    state.bounds.contains_rect(&monitor.bounds).then_some(monitor)
+    state
+        .bounds
+        .contains_rect(&monitor.bounds)
+        .then_some(monitor)
 }
 
 pub fn is_fullscreen_like(state: &WindowState, monitors: &[MonitorInfo]) -> bool {
@@ -47,7 +53,9 @@ fn is_near_fullscreen(state: &WindowState, monitors: &[MonitorInfo]) -> bool {
         && !state.cloaked
         && state.show_state == ShowState::Normal
         && state.is_borderless()
-        && monitors.iter().any(|m| m.bounds.approx_eq(&state.bounds, NEAR_FULLSCREEN_TOLERANCE))
+        && monitors
+            .iter()
+            .any(|m| m.bounds.approx_eq(&state.bounds, NEAR_FULLSCREEN_TOLERANCE))
 }
 
 /// What a state change on a window we are currently managing means.
@@ -63,7 +71,11 @@ pub enum ManagedObservation {
     Exited,
 }
 
-pub fn classify_managed(current: &WindowState, applied: &WindowState, monitors: &[MonitorInfo]) -> ManagedObservation {
+pub fn classify_managed(
+    current: &WindowState,
+    applied: &WindowState,
+    monitors: &[MonitorInfo],
+) -> ManagedObservation {
     if !current.visible || current.cloaked || current.show_state == ShowState::Minimized {
         return ManagedObservation::Dormant;
     }
@@ -85,11 +97,19 @@ pub fn classify_managed(current: &WindowState, applied: &WindowState, monitors: 
 /// The external zone (FancyZones) the window sat in before going fullscreen, as a visible rect.
 /// Only used when that zone is on the monitor the window went fullscreen on; a window snapped
 /// on another monitor, or maximized, has no zone to fill here.
-pub fn snapped_zone_target(pre: Option<&WindowState>, detected: &WindowState, monitor: &Rect) -> Option<Rect> {
+pub fn snapped_zone_target(
+    pre: Option<&WindowState>,
+    detected: &WindowState,
+    monitor: &Rect,
+) -> Option<Rect> {
     let pre = pre?;
     let snapped = pre.zone_snapped || detected.zone_snapped;
     let zone = pre.visible_bounds;
-    (snapped && pre.show_state == ShowState::Normal && !zone.is_empty() && monitor.contains_rect(&zone)).then_some(zone)
+    (snapped
+        && pre.show_state == ShowState::Normal
+        && !zone.is_empty()
+        && monitor.contains_rect(&zone))
+    .then_some(zone)
 }
 
 /// Where to put a panel the app placed relative to its own fullscreen rect (e.g. VLC's
@@ -103,7 +123,10 @@ pub fn map_companion(panel: Rect, fullscreen: Rect, zone: Rect) -> Option<Rect> 
     let cx = f64::from(panel.left) + f64::from(panel.width()) / 2.0;
     let cy = f64::from(panel.top) + f64::from(panel.height()) / 2.0;
     let inside = |r: &Rect| {
-        cx >= f64::from(r.left) && cx < f64::from(r.right) && cy >= f64::from(r.top) && cy < f64::from(r.bottom)
+        cx >= f64::from(r.left)
+            && cx < f64::from(r.right)
+            && cy >= f64::from(r.top)
+            && cy < f64::from(r.bottom)
     };
     if !inside(&fullscreen) || inside(&zone) {
         return None;
@@ -111,7 +134,8 @@ pub fn map_companion(panel: Rect, fullscreen: Rect, zone: Rect) -> Option<Rect> 
     let fx = (cx - f64::from(fullscreen.left)) / f64::from(fullscreen.width());
     let fy = (cy - f64::from(fullscreen.top)) / f64::from(fullscreen.height());
     let place = |start: i32, span: i32, fraction: f64, size: i32| {
-        let centred = (f64::from(start) + fraction * f64::from(span) - f64::from(size) / 2.0).round() as i32;
+        let centred =
+            (f64::from(start) + fraction * f64::from(span) - f64::from(size) / 2.0).round() as i32;
         centred.clamp(start, (start + span - size).max(start))
     };
     let left = place(zone.left, zone.width(), fx, panel.width());
@@ -124,7 +148,12 @@ pub fn map_companion(panel: Rect, fullscreen: Rect, zone: Rect) -> Option<Rect> 
 pub fn compensate_invisible_frame(target_visible: Rect, state: &WindowState) -> Rect {
     use super::geometry::Insets;
     let insets = Insets::between(&state.bounds, &state.visible_bounds);
-    if insets.is_zero() || insets.left < 0 || insets.top < 0 || insets.right < 0 || insets.bottom < 0 {
+    if insets.is_zero()
+        || insets.left < 0
+        || insets.top < 0
+        || insets.right < 0
+        || insets.bottom < 0
+    {
         target_visible
     } else {
         target_visible.expand(insets)
@@ -144,7 +173,10 @@ pub(crate) fn test_state(bounds: Rect) -> WindowState {
         has_title_bar: false,
         has_resize_frame: false,
         topmost: false,
-        style: NativeStyle { primary: 0x1600_0000, extended: 0 },
+        style: NativeStyle {
+            primary: 0x1600_0000,
+            extended: 0,
+        },
         monitor: None,
         dpi: 96,
         zone_snapped: false,
@@ -214,27 +246,48 @@ mod tests {
 
         let mut echo = applied.clone();
         echo.bounds.right += 1;
-        assert_eq!(classify_managed(&echo, &applied, &ms), ManagedObservation::Unchanged);
+        assert_eq!(
+            classify_managed(&echo, &applied, &ms),
+            ManagedObservation::Unchanged
+        );
 
         let refs = test_state(Rect::new(0, 0, 5120, 1440));
-        assert_eq!(classify_managed(&refs, &applied, &ms), ManagedObservation::Refullscreened);
+        assert_eq!(
+            classify_managed(&refs, &applied, &ms),
+            ManagedObservation::Refullscreened
+        );
 
         let moved_monitor = test_state(Rect::new(-1920, 0, 0, 1080));
-        assert_eq!(classify_managed(&moved_monitor, &applied, &ms), ManagedObservation::Refullscreened);
+        assert_eq!(
+            classify_managed(&moved_monitor, &applied, &ms),
+            ManagedObservation::Refullscreened
+        );
 
         let background_hack = test_state(Rect::new(0, 0, 5120, 1439));
         assert!(!is_fullscreen_like(&background_hack, &ms));
-        assert_eq!(classify_managed(&background_hack, &applied, &ms), ManagedObservation::Refullscreened);
+        assert_eq!(
+            classify_managed(&background_hack, &applied, &ms),
+            ManagedObservation::Refullscreened
+        );
 
         let mut redraw_lock = applied.clone();
         redraw_lock.style.primary &= !0x1000_0000;
-        assert_eq!(classify_managed(&redraw_lock, &applied, &ms), ManagedObservation::Unchanged);
+        assert_eq!(
+            classify_managed(&redraw_lock, &applied, &ms),
+            ManagedObservation::Unchanged
+        );
 
         let mut exited = test_state(Rect::new(200, 200, 1800, 1000));
         exited.has_title_bar = true;
         exited.has_resize_frame = true;
-        exited.style = NativeStyle { primary: 0x16CF_0000, extended: 0x100 };
-        assert_eq!(classify_managed(&exited, &applied, &ms), ManagedObservation::Exited);
+        exited.style = NativeStyle {
+            primary: 0x16CF_0000,
+            extended: 0x100,
+        };
+        assert_eq!(
+            classify_managed(&exited, &applied, &ms),
+            ManagedObservation::Exited
+        );
 
         let mut restored_style_same_bounds = applied.clone();
         restored_style_same_bounds.style.primary |= 0x00C0_0000;
@@ -246,7 +299,10 @@ mod tests {
 
         let mut minimized = applied.clone();
         minimized.show_state = ShowState::Minimized;
-        assert_eq!(classify_managed(&minimized, &applied, &ms), ManagedObservation::Dormant);
+        assert_eq!(
+            classify_managed(&minimized, &applied, &ms),
+            ManagedObservation::Dormant
+        );
     }
 
     #[test]
@@ -259,14 +315,23 @@ mod tests {
 
         assert_eq!(snapped_zone_target(Some(&pre), &detected, &monitor), None);
         pre.zone_snapped = true;
-        assert_eq!(snapped_zone_target(Some(&pre), &detected, &monitor), Some(Rect::new(1280, 0, 3840, 1440)));
+        assert_eq!(
+            snapped_zone_target(Some(&pre), &detected, &monitor),
+            Some(Rect::new(1280, 0, 3840, 1440))
+        );
 
         let other_monitor = Rect::new(-1920, 0, 0, 1080);
-        assert_eq!(snapped_zone_target(Some(&pre), &detected, &other_monitor), None);
+        assert_eq!(
+            snapped_zone_target(Some(&pre), &detected, &other_monitor),
+            None
+        );
 
         let mut maximized = pre.clone();
         maximized.show_state = ShowState::Maximized;
-        assert_eq!(snapped_zone_target(Some(&maximized), &detected, &monitor), None);
+        assert_eq!(
+            snapped_zone_target(Some(&maximized), &detected, &monitor),
+            None
+        );
 
         assert_eq!(snapped_zone_target(None, &detected, &monitor), None);
     }
@@ -286,14 +351,26 @@ mod tests {
 
         // Centred on the monitor → centred in the zone.
         let dialog = Rect::from_xywh(2260, 520, 600, 400);
-        assert_eq!(map_companion(dialog, fullscreen, zone), Some(Rect::from_xywh(980, 520, 600, 400)));
+        assert_eq!(
+            map_companion(dialog, fullscreen, zone),
+            Some(Rect::from_xywh(980, 520, 600, 400))
+        );
         let right_half = Rect::from_xywh(3540, 520, 600, 400);
         // Centre at 75% of the monitor → centre at 75% of the zone (1920).
-        assert_eq!(map_companion(right_half, fullscreen, zone).unwrap().left, 1620);
+        assert_eq!(
+            map_companion(right_half, fullscreen, zone).unwrap().left,
+            1620
+        );
 
         // Already in the zone, or on another monitor: left alone.
-        assert_eq!(map_companion(Rect::from_xywh(100, 100, 300, 200), fullscreen, zone), None);
-        assert_eq!(map_companion(Rect::from_xywh(-1500, 100, 300, 200), fullscreen, zone), None);
+        assert_eq!(
+            map_companion(Rect::from_xywh(100, 100, 300, 200), fullscreen, zone),
+            None
+        );
+        assert_eq!(
+            map_companion(Rect::from_xywh(-1500, 100, 300, 200), fullscreen, zone),
+            None
+        );
 
         // Wider than the zone: pinned to the zone's left edge.
         let wide = Rect::from_xywh(2800, 1300, 3000, 80);
@@ -305,7 +382,10 @@ mod tests {
         let mut s = test_state(Rect::new(93, 0, 1007, 707));
         s.visible_bounds = Rect::new(100, 0, 1000, 700);
         let target = Rect::new(0, 0, 3840, 1440);
-        assert_eq!(compensate_invisible_frame(target, &s), Rect::new(-7, 0, 3847, 1447));
+        assert_eq!(
+            compensate_invisible_frame(target, &s),
+            Rect::new(-7, 0, 3847, 1447)
+        );
 
         let borderless = test_state(Rect::new(0, 0, 10, 10));
         assert_eq!(compensate_invisible_frame(target, &borderless), target);

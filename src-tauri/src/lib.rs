@@ -1,3 +1,4 @@
+mod autostart;
 mod commands;
 pub mod core;
 mod engine;
@@ -26,7 +27,10 @@ pub mod events {
 fn init_logging() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("screenbound_lib=info,warn"));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).with_target(false).try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .try_init();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,6 +39,7 @@ pub fn run() {
     platform::init_process();
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Two instances would fight over the same windows; show the one already running.
             show_main(app);
@@ -60,6 +65,10 @@ pub fn run() {
 
             let platform = platform::create();
             let handle = EngineHandle::spawn(Engine::new(platform.clone(), paths, notify))?;
+            let start_at_boot = handle.call(|e| e.config().start_at_boot).map_err(|e| e.to_string())?;
+            if let Err(e) = autostart::sync(app.handle(), start_at_boot) {
+                tracing::warn!("autostart sync on startup failed: {e}");
+            }
 
             let engine_tx = handle.sender();
             let subscription = match platform.subscribe(Box::new(move |ev| {

@@ -20,6 +20,9 @@ pub struct AppConfig {
     /// How entering and leaving the zone is animated.
     #[serde(default)]
     pub transition: TransitionSpeed,
+    /// Register ScreenBound to launch at Windows sign-in (tray only; main window stays hidden).
+    #[serde(default)]
+    pub start_at_boot: bool,
     pub zones: Vec<Zone>,
     pub rules: Vec<WindowRule>,
     /// Named groups apps can be placed in. A rule can target one or more of these.
@@ -68,10 +71,16 @@ impl Default for AppConfig {
             version: CONFIG_VERSION,
             enabled: true,
             transition: TransitionSpeed::default(),
+            start_at_boot: false,
             zones: vec![Zone {
                 id: "zone-left-75".into(),
                 name: "75% Left".into(),
-                rect: NormalizedRect { x: 0.0, y: 0.0, width: 0.75, height: 1.0 },
+                rect: NormalizedRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.75,
+                    height: 1.0,
+                },
                 unit: ZoneUnit::Percent,
                 pixels: None,
                 monitor: None,
@@ -119,7 +128,10 @@ impl AppConfig {
                 return Err(ConfigError::Invalid("zone with empty id".into()));
             }
             if !seen.insert(zone.id.clone()) {
-                return Err(ConfigError::Invalid(format!("duplicate zone id '{}'", zone.id)));
+                return Err(ConfigError::Invalid(format!(
+                    "duplicate zone id '{}'",
+                    zone.id
+                )));
             }
             zone.rect = zone.rect.sanitized();
             zone.pixels = zone.pixels.map(|p| p.sanitized());
@@ -130,7 +142,10 @@ impl AppConfig {
                 return Err(ConfigError::Invalid("group with empty id".into()));
             }
             if !seen_groups.insert(group.id.clone()) {
-                return Err(ConfigError::Invalid(format!("duplicate group id '{}'", group.id)));
+                return Err(ConfigError::Invalid(format!(
+                    "duplicate group id '{}'",
+                    group.id
+                )));
             }
             group.name = group.name.trim().to_string();
             if group.name.is_empty() {
@@ -146,7 +161,10 @@ impl AppConfig {
         let mut seen = std::collections::HashSet::new();
         for rule in &self.rules {
             if !seen.insert(rule.id.clone()) {
-                return Err(ConfigError::Invalid(format!("duplicate rule id '{}'", rule.id)));
+                return Err(ConfigError::Invalid(format!(
+                    "duplicate rule id '{}'",
+                    rule.id
+                )));
             }
             if let Some((zone_id, _)) = rule.fullscreen_zone() {
                 if self.zone(zone_id).is_none() {
@@ -166,11 +184,17 @@ impl AppConfig {
             let group_id = app.group_id.filter(|id| seen_groups.contains(id));
             seen_apps.insert(
                 name.to_lowercase(),
-                KnownApp { process_name: name, title: app.title, enabled: app.enabled, group_id },
+                KnownApp {
+                    process_name: name,
+                    title: app.title,
+                    enabled: app.enabled,
+                    group_id,
+                },
             );
         }
         self.known_apps = seen_apps.into_values().collect();
-        self.known_apps.sort_by_key(|app| app.process_name.to_lowercase());
+        self.known_apps
+            .sort_by_key(|app| app.process_name.to_lowercase());
         for rule in &mut self.rules {
             if let Some(RuleScope::Groups { group_ids }) = &mut rule.scope {
                 group_ids.retain(|id| seen_groups.contains(id));
@@ -181,7 +205,10 @@ impl AppConfig {
     }
 
     pub fn match_rule(&self, id: &super::window::WindowIdentity) -> Option<&WindowRule> {
-        let known = self.known_apps.iter().find(|app| app.process_name.eq_ignore_ascii_case(&id.process_name));
+        let known = self
+            .known_apps
+            .iter()
+            .find(|app| app.process_name.eq_ignore_ascii_case(&id.process_name));
         super::rules::first_match(
             &self.rules,
             id,
@@ -204,7 +231,9 @@ impl AppConfig {
     }
 }
 
-const GROUP_ICONS: &[&str] = &["apps", "browser", "video", "game", "music", "chat", "folder", "star"];
+const GROUP_ICONS: &[&str] = &[
+    "apps", "browser", "video", "game", "music", "chat", "folder", "star",
+];
 
 fn is_hex_color(value: &str) -> bool {
     let mut chars = value.chars();
@@ -274,7 +303,10 @@ mod tests {
     fn save_and_load() {
         let dir = std::env::temp_dir().join(format!("screenbound-test-{}", std::process::id()));
         let path = dir.join("config.json");
-        let cfg = AppConfig { enabled: false, ..Default::default() };
+        let cfg = AppConfig {
+            enabled: false,
+            ..Default::default()
+        };
         cfg.save(&path).unwrap();
         assert_eq!(AppConfig::load(&path).unwrap(), cfg);
         std::fs::remove_dir_all(dir).ok();
@@ -282,7 +314,9 @@ mod tests {
 
     #[test]
     fn missing_file_yields_default() {
-        let path = std::env::temp_dir().join("screenbound-does-not-exist").join("config.json");
+        let path = std::env::temp_dir()
+            .join("screenbound-does-not-exist")
+            .join("config.json");
         assert_eq!(AppConfig::load(&path).unwrap(), AppConfig::default());
     }
 }

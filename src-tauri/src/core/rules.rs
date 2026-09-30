@@ -22,7 +22,9 @@ pub enum Matcher {
 impl Matcher {
     pub fn matches(&self, id: &WindowIdentity) -> bool {
         match self {
-            Matcher::ProcessName(name) => !name.is_empty() && id.process_name.eq_ignore_ascii_case(name.trim()),
+            Matcher::ProcessName(name) => {
+                !name.is_empty() && id.process_name.eq_ignore_ascii_case(name.trim())
+            }
             Matcher::ExecutablePath(path) => {
                 !path.is_empty() && id.executable_path.eq_ignore_ascii_case(path.trim())
             }
@@ -100,7 +102,11 @@ impl WindowRule {
     #[allow(clippy::unnecessary_find_map)]
     pub fn fullscreen_action(&self) -> Option<FullscreenAction<'_>> {
         self.actions.iter().find_map(|a| match a {
-            Action::FullscreenZone { zone_id, chrome, use_snapped_zone } => Some(FullscreenAction {
+            Action::FullscreenZone {
+                zone_id,
+                chrome,
+                use_snapped_zone,
+            } => Some(FullscreenAction {
                 zone_id: zone_id.as_str(),
                 chrome: *chrome,
                 use_snapped_zone: *use_snapped_zone,
@@ -119,10 +125,16 @@ pub fn first_match<'a>(
     id: &WindowIdentity,
     known: Option<(bool, Option<&str>)>,
 ) -> Option<&'a WindowRule> {
-    rules.iter().find(|rule| rule.enabled && rule_matches(rule, id, known))
+    rules
+        .iter()
+        .find(|rule| rule.enabled && rule_matches(rule, id, known))
 }
 
-fn rule_matches(rule: &WindowRule, id: &WindowIdentity, known: Option<(bool, Option<&str>)>) -> bool {
+fn rule_matches(
+    rule: &WindowRule,
+    id: &WindowIdentity,
+    known: Option<(bool, Option<&str>)>,
+) -> bool {
     let Some(scope) = &rule.scope else {
         return rule.matcher.matches(id);
     };
@@ -134,10 +146,12 @@ fn rule_matches(rule: &WindowRule, id: &WindowIdentity, known: Option<(bool, Opt
     }
     match scope {
         RuleScope::All => true,
-        RuleScope::Groups { group_ids } => group_id.is_some_and(|group| group_ids.iter().any(|id| id == group)),
-        RuleScope::Apps { process_names } => {
-            process_names.iter().any(|name| id.process_name.eq_ignore_ascii_case(name.trim()))
+        RuleScope::Groups { group_ids } => {
+            group_id.is_some_and(|group| group_ids.iter().any(|id| id == group))
         }
+        RuleScope::Apps { process_names } => process_names
+            .iter()
+            .any(|name| id.process_name.eq_ignore_ascii_case(name.trim())),
     }
 }
 
@@ -145,7 +159,10 @@ fn rule_matches(rule: &WindowRule, id: &WindowIdentity, known: Option<(bool, Opt
 pub(crate) fn test_identity(process_name: &str, class_name: &str, title: &str) -> WindowIdentity {
     use super::window::ProcessRef;
     WindowIdentity {
-        process: ProcessRef { pid: 1, start_time: 1 },
+        process: ProcessRef {
+            pid: 1,
+            start_time: 1,
+        },
         process_name: process_name.into(),
         executable_path: format!(r"C:\Apps\{process_name}"),
         class_name: class_name.into(),
@@ -176,7 +193,11 @@ mod tests {
 
     #[test]
     fn composite_matchers() {
-        let id = test_identity("firefox.exe", "MozillaWindowClass", "Big Buck Bunny — Mozilla Firefox");
+        let id = test_identity(
+            "firefox.exe",
+            "MozillaWindowClass",
+            "Big Buck Bunny — Mozilla Firefox",
+        );
         let all = Matcher::All(vec![
             Matcher::ProcessName("firefox.exe".into()),
             Matcher::WindowClass("MozillaWindowClass".into()),
@@ -197,12 +218,19 @@ mod tests {
             enabled,
             matcher: browsers(),
             scope: None,
-            actions: vec![Action::FullscreenZone { zone_id: id.into(), chrome: ChromeMode::Keep, use_snapped_zone: true }],
+            actions: vec![Action::FullscreenZone {
+                zone_id: id.into(),
+                chrome: ChromeMode::Keep,
+                use_snapped_zone: true,
+            }],
         };
         let rules = vec![rule("disabled", false), rule("a", true), rule("b", true)];
         let id = test_identity("msedge.exe", "Chrome_WidgetWin_1", "");
         assert_eq!(first_match(&rules, &id, None).unwrap().id, "a");
-        assert_eq!(first_match(&rules, &id, None).unwrap().fullscreen_zone(), Some(("a", ChromeMode::Keep)));
+        assert_eq!(
+            first_match(&rules, &id, None).unwrap().fullscreen_zone(),
+            Some(("a", ChromeMode::Keep))
+        );
     }
 
     #[test]
@@ -217,14 +245,28 @@ mod tests {
             actions: vec![],
         };
         let all = rule(RuleScope::All);
-        let group = rule(RuleScope::Groups { group_ids: vec!["games".into()] });
-        let named = rule(RuleScope::Apps { process_names: vec!["vlc.exe".into()] });
+        let group = rule(RuleScope::Groups {
+            group_ids: vec!["games".into()],
+        });
+        let named = rule(RuleScope::Apps {
+            process_names: vec!["vlc.exe".into()],
+        });
 
         assert!(first_match(std::slice::from_ref(&all), &id, Some((true, None))).is_some());
         assert!(first_match(std::slice::from_ref(&all), &id, Some((false, None))).is_none());
         assert!(first_match(std::slice::from_ref(&all), &id, None).is_none());
-        assert!(first_match(std::slice::from_ref(&group), &id, Some((true, Some("games")))).is_some());
-        assert!(first_match(std::slice::from_ref(&group), &id, Some((true, Some("browsers")))).is_none());
+        assert!(first_match(
+            std::slice::from_ref(&group),
+            &id,
+            Some((true, Some("games")))
+        )
+        .is_some());
+        assert!(first_match(
+            std::slice::from_ref(&group),
+            &id,
+            Some((true, Some("browsers")))
+        )
+        .is_none());
         assert!(first_match(std::slice::from_ref(&named), &id, Some((true, None))).is_some());
         assert!(first_match(std::slice::from_ref(&named), &id, Some((false, None))).is_none());
     }
@@ -239,8 +281,12 @@ mod tests {
         let rule: WindowRule = serde_json::from_str(json).unwrap();
         assert!(rule.enabled);
         assert_eq!(rule.fullscreen_zone(), Some(("left-75", ChromeMode::Hide)));
-        assert!(rule.fullscreen_action().unwrap().use_snapped_zone, "older rules default to using FancyZones");
-        let back: WindowRule = serde_json::from_str(&serde_json::to_string(&rule).unwrap()).unwrap();
+        assert!(
+            rule.fullscreen_action().unwrap().use_snapped_zone,
+            "older rules default to using FancyZones"
+        );
+        let back: WindowRule =
+            serde_json::from_str(&serde_json::to_string(&rule).unwrap()).unwrap();
         assert_eq!(back, rule);
     }
 }

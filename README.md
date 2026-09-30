@@ -47,7 +47,20 @@ else stays visible next to it.
    fullscreen and it goes back to normal.
 
 ScreenBound runs quietly in the system tray, reacts only when windows change (it doesn't poll in
-the background), and keeps your settings across updates.
+the background), and keeps your settings across updates. Turn on **Start at boot** in Settings if
+you want it ready from sign-in without opening the window.
+
+## What to expect
+
+**You may see a brief fullscreen flash.** When you hit fullscreen, the app still asks Windows for
+real fullscreen first. ScreenBound only finds out *after* that and then moves the window into your
+zone. That tiny gap can look like a quick flicker of the monitor filling up before it snaps into
+place.
+
+**Why we can't remove it (yet).** ScreenBound works from the outside: it watches window changes
+and resizes the real window. It does not run inside the app or block Windows from honouring a
+fullscreen request. To shrink the window, the app has to enter fullscreen first so we know it
+happened. We apply the zone as fast as we can; on most setups the flash is very short.
 
 ## Install
 
