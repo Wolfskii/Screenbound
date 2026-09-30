@@ -47,6 +47,7 @@ impl Default for AppConfig {
                 matcher: Matcher::Any(vec![
                     Matcher::ProcessName("chrome.exe".into()),
                     Matcher::ProcessName("msedge.exe".into()),
+                    Matcher::ProcessName("brave.exe".into()),
                     Matcher::ProcessName("firefox.exe".into()),
                     Matcher::ProcessName("librewolf.exe".into()),
                 ]),

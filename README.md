@@ -18,7 +18,7 @@ task dev
 
 `task --list` shows the rest (`task test`, `task release`, `task deploy`, …).
 
-Defaults: zone "75% Left", rule "Browsers" (chrome.exe, msedge.exe, firefox.exe, librewolf.exe).
+Defaults: zone "75% Left", rule "Browsers" (chrome.exe, msedge.exe, brave.exe, firefox.exe, librewolf.exe).
 
 ## Docs
 
