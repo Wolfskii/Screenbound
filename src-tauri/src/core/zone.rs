@@ -43,6 +43,55 @@ impl NormalizedRect {
     }
 }
 
+/// Rectangle in physical pixels, offset from the reference rect's top-left corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PixelRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+impl PixelRect {
+    pub const MIN_SIZE: i32 = 32;
+
+    pub fn sanitized(self) -> PixelRect {
+        PixelRect {
+            x: self.x.max(0),
+            y: self.y.max(0),
+            width: self.width.max(Self::MIN_SIZE),
+            height: self.height.max(Self::MIN_SIZE),
+        }
+    }
+
+    /// Maps onto `reference`, shrinking then shifting so the zone always fits a smaller monitor.
+    pub fn resolve(&self, reference: &Rect) -> Rect {
+        let p = self.sanitized();
+        let ref_w = reference.width().max(1);
+        let ref_h = reference.height().max(1);
+        let width = p.width.min(ref_w);
+        let height = p.height.min(ref_h);
+        let x = p.x.min(ref_w - width);
+        let y = p.y.min(ref_h - height);
+        Rect::new(
+            reference.left + x,
+            reference.top + y,
+            reference.left + x + width,
+            reference.top + y + height,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ZoneUnit {
+    /// `rect` fractions of the reference; adapts to any resolution.
+    #[default]
+    Percent,
+    /// `pixels` exact physical size and offset.
+    Pixels,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ZoneReference {
@@ -59,6 +108,11 @@ pub struct Zone {
     pub id: String,
     pub name: String,
     pub rect: NormalizedRect,
+    #[serde(default)]
+    pub unit: ZoneUnit,
+    /// Used when `unit` is `Pixels`; falls back to `rect` if missing.
+    #[serde(default)]
+    pub pixels: Option<PixelRect>,
     /// Pin the zone to a monitor. `None` = apply on whichever monitor the window is on.
     #[serde(default)]
     pub monitor: Option<MonitorId>,
@@ -85,7 +139,10 @@ impl Zone {
             ZoneReference::Monitor => monitor.bounds,
             ZoneReference::WorkArea => monitor.work_area,
         };
-        self.rect.resolve(&reference)
+        match (self.unit, self.pixels) {
+            (ZoneUnit::Pixels, Some(pixels)) => pixels.resolve(&reference),
+            _ => self.rect.resolve(&reference),
+        }
     }
 }
 
@@ -139,10 +196,52 @@ mod tests {
             id: "z".into(),
             name: "z".into(),
             rect: NormalizedRect::FULL,
+            unit: ZoneUnit::Percent,
+            pixels: None,
             monitor: None,
             reference: ZoneReference::WorkArea,
         };
         assert_eq!(zone.resolve_on(&m), m.work_area);
+    }
+
+    fn px(x: i32, y: i32, width: i32, height: i32) -> PixelRect {
+        PixelRect { x, y, width, height }
+    }
+
+    #[test]
+    fn pixel_zone_is_offset_from_reference_origin() {
+        let monitor = Rect::new(-5120, 0, 0, 1440);
+        assert_eq!(px(640, 0, 3840, 1440).resolve(&monitor), Rect::new(-4480, 0, -640, 1440));
+    }
+
+    #[test]
+    fn pixel_zone_shrinks_and_shifts_to_fit_smaller_monitor() {
+        let monitor = Rect::new(0, 0, 1920, 1080);
+        assert_eq!(px(1000, 0, 3840, 1440).resolve(&monitor), Rect::new(0, 0, 1920, 1080));
+        assert_eq!(px(1500, 100, 1000, 500).resolve(&monitor), Rect::new(920, 100, 1920, 600));
+    }
+
+    #[test]
+    fn pixel_zone_sanitizes_negative_and_tiny_values() {
+        let s = px(-10, -5, 0, 5).sanitized();
+        assert_eq!(s, px(0, 0, PixelRect::MIN_SIZE, PixelRect::MIN_SIZE));
+    }
+
+    #[test]
+    fn pixel_unit_without_pixels_falls_back_to_rect() {
+        let m = test_monitor("m", Rect::new(0, 0, 2000, 1000));
+        let mut zone = Zone {
+            id: "z".into(),
+            name: "z".into(),
+            rect: nr(0.0, 0.0, 0.5, 1.0),
+            unit: ZoneUnit::Pixels,
+            pixels: None,
+            monitor: None,
+            reference: ZoneReference::Monitor,
+        };
+        assert_eq!(zone.resolve_on(&m), Rect::new(0, 0, 1000, 1000));
+        zone.pixels = Some(px(100, 0, 1200, 900));
+        assert_eq!(zone.resolve_on(&m), Rect::new(100, 0, 1300, 900));
     }
 
     #[test]
@@ -154,6 +253,8 @@ mod tests {
             id: "z".into(),
             name: "z".into(),
             rect: NormalizedRect::FULL,
+            unit: ZoneUnit::Percent,
+            pixels: None,
             monitor: Some(MonitorId("b".into())),
             reference: ZoneReference::Monitor,
         };
@@ -168,6 +269,8 @@ mod tests {
         let zone: Zone = serde_json::from_str(json).unwrap();
         assert_eq!(zone.monitor, None);
         assert_eq!(zone.reference, ZoneReference::Monitor);
+        assert_eq!(zone.unit, ZoneUnit::Percent);
+        assert_eq!(zone.pixels, None);
         let back: Zone = serde_json::from_str(&serde_json::to_string(&zone).unwrap()).unwrap();
         assert_eq!(back, zone);
     }

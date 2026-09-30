@@ -25,12 +25,23 @@ export interface NormalizedRect {
     height: number;
 }
 
+/** Physical pixels, offset from the reference rect's top-left corner. */
+export interface PixelRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 export type ZoneReference = "monitor" | "workArea";
+export type ZoneUnit = "percent" | "pixels";
 
 export interface Zone {
     id: string;
     name: string;
     rect: NormalizedRect;
+    unit: ZoneUnit;
+    pixels: PixelRect | null;
     monitor: string | null;
     reference: ZoneReference;
 }

@@ -9,7 +9,7 @@ Legend: ✅ verified on real Windows · 🧪 implemented, unit-tested, awaiting 
 | --- | --- | --- |
 | 0 | Tauri 2 + Svelte 5 (SvelteKit SPA) + Rust bootstrap, single-instance | ✅ app starts |
 | 1 | Monitor discovery (bounds, work area, DPI, friendly name, stable device path) | ✅ 1 monitor · ⬜ multi/negative/mixed DPI |
-| 2 | Zone model (normalized rects, monitor pinning, work-area reference) | ✅ unit tests |
+| 2 | Zone model (percent or pixel rects, monitor pinning, work-area reference) | ✅ unit tests (pixel mode 🧪 on real apps) |
 | 3 | Window discovery + diagnostics view | ✅ enumeration/state probe · 🧪 UI |
 | 4 | Fullscreen detection (Chrome / Edge / Firefox) | ✅ Edge (`--start-fullscreen`) · ⬜ Chrome · ⬜ Firefox · ⬜ HTML5 video fullscreen |
 | 5 | State preservation / restoration + crash journal | ✅ restore on exit · ✅ journal recovery · ⬜ exit-fullscreen restore |

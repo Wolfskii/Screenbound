@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NormalizedRect, Rect } from "$lib/types";
+  import type { NormalizedRect, Rect, ZoneUnit } from "$lib/types";
   import { rectH, rectW } from "$lib/types";
   import { clamp, resolve, sanitize, snap } from "$lib/zones";
 
@@ -8,6 +8,7 @@
   let {
     rect,
     reference,
+    unit = "percent",
     others = [],
     onchange,
     oncommit,
@@ -15,6 +16,7 @@
     rect: NormalizedRect;
     /** Physical pixel rect the zone is relative to (monitor bounds or work area). */
     reference: Rect;
+    unit?: ZoneUnit;
     others?: { name: string; rect: NormalizedRect }[];
     onchange: (r: NormalizedRect) => void;
     oncommit: () => void;
@@ -40,22 +42,24 @@
     const dy = (e.clientY - drag.startY) / box.height;
     const s = drag.start;
     const free = e.shiftKey;
-    const sn = (v: number) => (free ? v : snap(v));
+    const pixels = unit === "pixels";
+    const snX = (v: number) => (free ? v : snap(v, pixels ? rectW(reference) : undefined));
+    const snY = (v: number) => (free ? v : snap(v, pixels ? rectH(reference) : undefined));
     let left = s.x;
     let top = s.y;
     let right = s.x + s.width;
     let bottom = s.y + s.height;
 
     if (drag.handle === "move") {
-      const x = clamp(sn(s.x + dx), 0, 1 - s.width);
-      const y = clamp(sn(s.y + dy), 0, 1 - s.height);
+      const x = clamp(snX(s.x + dx), 0, 1 - s.width);
+      const y = clamp(snY(s.y + dy), 0, 1 - s.height);
       onchange({ x, y, width: s.width, height: s.height });
       return;
     }
-    if (drag.handle.includes("w")) left = clamp(sn(s.x + dx), 0, right - 0.02);
-    if (drag.handle.includes("e")) right = clamp(sn(right + dx), left + 0.02, 1);
-    if (drag.handle.includes("n")) top = clamp(sn(s.y + dy), 0, bottom - 0.02);
-    if (drag.handle.includes("s")) bottom = clamp(sn(bottom + dy), top + 0.02, 1);
+    if (drag.handle.includes("w")) left = clamp(snX(s.x + dx), 0, right - 0.02);
+    if (drag.handle.includes("e")) right = clamp(snX(right + dx), left + 0.02, 1);
+    if (drag.handle.includes("n")) top = clamp(snY(s.y + dy), 0, bottom - 0.02);
+    if (drag.handle.includes("s")) bottom = clamp(snY(bottom + dy), top + 0.02, 1);
     onchange(sanitize({ x: left, y: top, width: right - left, height: bottom - top }));
   }
 
@@ -103,8 +107,13 @@
       onpointercancel={end}
     >
       <div class="label">
-        <strong>{Math.round(rect.width * 1000) / 10}% × {Math.round(rect.height * 1000) / 10}%</strong>
-        <span>{rectW(px)} × {rectH(px)} px</span>
+        {#if unit === "pixels"}
+          <strong>{rectW(px)} × {rectH(px)} px</strong>
+          <span>{Math.round(rect.width * 1000) / 10}% × {Math.round(rect.height * 1000) / 10}%</span>
+        {:else}
+          <strong>{Math.round(rect.width * 1000) / 10}% × {Math.round(rect.height * 1000) / 10}%</strong>
+          <span>{rectW(px)} × {rectH(px)} px</span>
+        {/if}
       </div>
       {#each handles as h (h)}
         <!-- Move/up events bubble to the zone element while captured. -->
@@ -112,7 +121,10 @@
       {/each}
     </div>
   </div>
-  <p class="hint">Drag to move, drag edges/corners to resize. Snaps to 0.5% and common splits; hold Shift for free resize.</p>
+  <p class="hint">
+    Drag to move, drag edges/corners to resize. Snaps to {unit === "pixels" ? "8 px" : "0.5%"} and common splits; hold
+    Shift for free resize.
+  </p>
 </div>
 
 <style>

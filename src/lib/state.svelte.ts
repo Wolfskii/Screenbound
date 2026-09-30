@@ -111,6 +111,8 @@ class AppState {
             id: newId("zone"),
             name: `Zone ${this.config.zones.length + 1}`,
             rect: { x: 0, y: 0, width: 0.5, height: 1 },
+            unit: "percent",
+            pixels: null,
             monitor: null,
             reference: "monitor",
         };

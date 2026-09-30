@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::rules::{Action, Matcher, RuleScope, WindowRule};
 use super::transition::TransitionSpeed;
 use super::window::ChromeMode;
-use super::zone::{NormalizedRect, Zone, ZoneReference};
+use super::zone::{NormalizedRect, Zone, ZoneReference, ZoneUnit};
 
 pub const CONFIG_VERSION: u32 = 1;
 
@@ -72,6 +72,8 @@ impl Default for AppConfig {
                 id: "zone-left-75".into(),
                 name: "75% Left".into(),
                 rect: NormalizedRect { x: 0.0, y: 0.0, width: 0.75, height: 1.0 },
+                unit: ZoneUnit::Percent,
+                pixels: None,
                 monitor: None,
                 reference: ZoneReference::Monitor,
             }],
@@ -120,6 +122,7 @@ impl AppConfig {
                 return Err(ConfigError::Invalid(format!("duplicate zone id '{}'", zone.id)));
             }
             zone.rect = zone.rect.sanitized();
+            zone.pixels = zone.pixels.map(|p| p.sanitized());
         }
         let mut seen_groups = std::collections::HashSet::new();
         for group in &mut self.groups {
