@@ -47,7 +47,18 @@ pub enum Action {
         zone_id: String,
         #[serde(default)]
         chrome: ChromeMode,
+        /// A window snapped into a FancyZones zone fills that zone instead of `zone_id`.
+        #[serde(default = "default_true")]
+        use_snapped_zone: bool,
     },
+}
+
+/// The fullscreen action of a rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FullscreenAction<'a> {
+    pub zone_id: &'a str,
+    pub chrome: ChromeMode,
+    pub use_snapped_zone: bool,
 }
 
 /// Which apps a rule applies to. Absent on older rules, which still use `matcher`.
@@ -81,11 +92,19 @@ fn default_true() -> bool {
 }
 
 impl WindowRule {
+    pub fn fullscreen_zone(&self) -> Option<(&str, ChromeMode)> {
+        self.fullscreen_action().map(|a| (a.zone_id, a.chrome))
+    }
+
     // find_map stays correct once more Action variants exist.
     #[allow(clippy::unnecessary_find_map)]
-    pub fn fullscreen_zone(&self) -> Option<(&str, ChromeMode)> {
+    pub fn fullscreen_action(&self) -> Option<FullscreenAction<'_>> {
         self.actions.iter().find_map(|a| match a {
-            Action::FullscreenZone { zone_id, chrome } => Some((zone_id.as_str(), *chrome)),
+            Action::FullscreenZone { zone_id, chrome, use_snapped_zone } => Some(FullscreenAction {
+                zone_id: zone_id.as_str(),
+                chrome: *chrome,
+                use_snapped_zone: *use_snapped_zone,
+            }),
         })
     }
 }
@@ -178,7 +197,7 @@ mod tests {
             enabled,
             matcher: browsers(),
             scope: None,
-            actions: vec![Action::FullscreenZone { zone_id: id.into(), chrome: ChromeMode::Keep }],
+            actions: vec![Action::FullscreenZone { zone_id: id.into(), chrome: ChromeMode::Keep, use_snapped_zone: true }],
         };
         let rules = vec![rule("disabled", false), rule("a", true), rule("b", true)];
         let id = test_identity("msedge.exe", "Chrome_WidgetWin_1", "");
@@ -220,6 +239,7 @@ mod tests {
         let rule: WindowRule = serde_json::from_str(json).unwrap();
         assert!(rule.enabled);
         assert_eq!(rule.fullscreen_zone(), Some(("left-75", ChromeMode::Hide)));
+        assert!(rule.fullscreen_action().unwrap().use_snapped_zone, "older rules default to using FancyZones");
         let back: WindowRule = serde_json::from_str(&serde_json::to_string(&rule).unwrap()).unwrap();
         assert_eq!(back, rule);
     }

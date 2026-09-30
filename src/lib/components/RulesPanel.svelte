@@ -1,5 +1,6 @@
 <script lang="ts">
   import GroupBadge from "$lib/components/GroupBadge.svelte";
+  import Switch from "$lib/components/Switch.svelte";
   import { app, newId } from "$lib/state.svelte";
   import type { Action, ChromeMode, RuleScope, WindowRule } from "$lib/types";
 
@@ -33,7 +34,7 @@
       enabled: true,
       matcher: { type: "any", value: [] },
       scope: { type: "all" },
-      actions: [{ type: "fullscreenZone", zoneId, chrome: "keep" }],
+      actions: [{ type: "fullscreenZone", zoneId, chrome: "keep", useSnappedZone: true }],
     });
     app.scheduleSave(true);
   }
@@ -112,6 +113,26 @@
           </label>
         {/if}
       </div>
+
+      {#if action}
+        <div class="option">
+          <div class="info">
+            <span>Use FancyZones zone</span>
+            <span class="dim">
+              A window snapped into a PowerToys FancyZones zone fills that zone when it goes fullscreen, instead of the
+              zone above.
+            </span>
+          </div>
+          <Switch
+            checked={action.useSnappedZone ?? true}
+            label="Use the FancyZones zone for snapped windows in {rule.name}"
+            onchange={(next) => {
+              action.useSnappedZone = next;
+              app.scheduleSave(true);
+            }}
+          />
+        </div>
+      {/if}
 
       {#if rule.scope?.type === "groups"}
         <div class="chips">
@@ -199,6 +220,17 @@
     display: grid;
     grid-template-columns: 2fr 1fr 1fr;
     gap: 10px;
+  }
+  .option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .option .info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
   }
   .chips {
     display: flex;

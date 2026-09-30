@@ -128,6 +128,7 @@
           <dt>Resize frame</dt><dd>{detail.state.hasResizeFrame}</dd>
           <dt>Borderless</dt><dd>{!detail.state.hasTitleBar && !detail.state.hasResizeFrame}</dd>
           <dt>Topmost</dt><dd>{detail.state.topmost}</dd>
+          <dt>FancyZones</dt><dd>{detail.state.zoneSnapped ? "snapped" : "not snapped"}</dd>
           <dt>Style / ExStyle</dt><dd class="mono">{hex(detail.state.style.primary)} / {hex(detail.state.style.extended)}</dd>
           <dt>Fullscreen</dt><dd>{detail.fullscreenLike}</dd>
           <dt>Matched rule</dt><dd>{detail.matchedRule ?? "—"}</dd>

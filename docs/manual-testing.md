@@ -15,6 +15,16 @@ For each case record result + date in PLAN.md / docs/fullscreen-research.md.
 5. Exit fullscreen (Esc). Expect "Fullscreen exited; released", browser back at its previous size/position/maximized state.
 6. Repeat with chrome mode Hide.
 
+## Companion panels (VLC)
+
+1. VLC enabled on the Apps tab, fullscreen a video.
+2. Move the mouse so the fullscreen controls appear. Expect them inside the zone, at the same
+   relative spot they use on the full monitor (bottom-centre-ish), not on the rest of the screen.
+3. Drag the controls out of the zone; expect them to stay there, also after they hide and
+   reappear. Leave fullscreen and enter it again; expect them back inside the zone.
+4. In a browser, open a menu or bubble near the zone edge while fullscreen; expect it untouched.
+5. With a second browser window on the same monitor, expect that window untouched.
+
 ## Lifecycle
 
 - Close the browser while constrained → "Window closed while managed", journal cleared.

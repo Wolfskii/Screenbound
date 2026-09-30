@@ -34,8 +34,14 @@ rect Firefox puts back. On exit we restore the last framed or maximized window w
 
 The monitor-sized frame was visible for a moment before the zone applied: out-of-context WinEvents
 arrive after the resize, and evaluation waited 60 ms to coalesce the transition. Fullscreen-sized
-changes are applied on the same turn, and the window is DWM-cloaked across `SetWindowPos` so that
-jump is not presented.
+changes are now applied on the same turn, which shortens the flash but cannot remove it: the app
+has already presented the monitor-sized frame when the event arrives.
+
+Hiding the window across our move does not work from outside the app. **Observed (2026-09):**
+`DwmSetWindowAttribute(DWMWA_CLOAK)` on another process's window returns E_ACCESSDENIED
+(`probe_cross_process_cloak`). Removing both jumps (enter and exit) needs code running inside the
+target process that rewrites `WM_WINDOWPOSCHANGING`, i.e. an injected hook DLL. For Firefox-family
+browsers, `full-screen-api.ignore-widgets = true` avoids the OS resize altogether.
 
 ## Detection heuristic (core/fullscreen.rs)
 

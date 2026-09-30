@@ -82,6 +82,43 @@ pub fn classify_managed(current: &WindowState, applied: &WindowState, monitors: 
     ManagedObservation::Exited
 }
 
+/// The external zone (FancyZones) the window sat in before going fullscreen, as a visible rect.
+/// Only used when that zone is on the monitor the window went fullscreen on; a window snapped
+/// on another monitor, or maximized, has no zone to fill here.
+pub fn snapped_zone_target(pre: Option<&WindowState>, detected: &WindowState, monitor: &Rect) -> Option<Rect> {
+    let pre = pre?;
+    let snapped = pre.zone_snapped || detected.zone_snapped;
+    let zone = pre.visible_bounds;
+    (snapped && pre.show_state == ShowState::Normal && !zone.is_empty() && monitor.contains_rect(&zone)).then_some(zone)
+}
+
+/// Where to put a panel the app placed relative to its own fullscreen rect (e.g. VLC's
+/// fullscreen controls): the same relative spot in the zone, same size, kept inside the zone.
+/// `None` when the panel is not on that fullscreen rect, or its centre is already in the zone
+/// (menus and popups anchored to the constrained window).
+pub fn map_companion(panel: Rect, fullscreen: Rect, zone: Rect) -> Option<Rect> {
+    if panel.is_empty() || fullscreen.is_empty() || zone.is_empty() {
+        return None;
+    }
+    let cx = f64::from(panel.left) + f64::from(panel.width()) / 2.0;
+    let cy = f64::from(panel.top) + f64::from(panel.height()) / 2.0;
+    let inside = |r: &Rect| {
+        cx >= f64::from(r.left) && cx < f64::from(r.right) && cy >= f64::from(r.top) && cy < f64::from(r.bottom)
+    };
+    if !inside(&fullscreen) || inside(&zone) {
+        return None;
+    }
+    let fx = (cx - f64::from(fullscreen.left)) / f64::from(fullscreen.width());
+    let fy = (cy - f64::from(fullscreen.top)) / f64::from(fullscreen.height());
+    let place = |start: i32, span: i32, fraction: f64, size: i32| {
+        let centred = (f64::from(start) + fraction * f64::from(span) - f64::from(size) / 2.0).round() as i32;
+        centred.clamp(start, (start + span - size).max(start))
+    };
+    let left = place(zone.left, zone.width(), fx, panel.width());
+    let top = place(zone.top, zone.height(), fy, panel.height());
+    Some(Rect::from_xywh(left, top, panel.width(), panel.height()))
+}
+
 /// Adjusts a desired *visible* rect into the rect to pass to the platform, compensating for
 /// invisible resize borders (Windows 10+ draws ~7px transparent borders on framed windows).
 pub fn compensate_invisible_frame(target_visible: Rect, state: &WindowState) -> Rect {
@@ -110,6 +147,7 @@ pub(crate) fn test_state(bounds: Rect) -> WindowState {
         style: NativeStyle { primary: 0x1600_0000, extended: 0 },
         monitor: None,
         dpi: 96,
+        zone_snapped: false,
     }
 }
 
@@ -209,6 +247,57 @@ mod tests {
         let mut minimized = applied.clone();
         minimized.show_state = ShowState::Minimized;
         assert_eq!(classify_managed(&minimized, &applied, &ms), ManagedObservation::Dormant);
+    }
+
+    #[test]
+    fn snapped_zone_is_the_pre_fullscreen_visible_rect() {
+        let monitor = Rect::new(0, 0, 5120, 1440);
+        let detected = test_state(monitor);
+        let mut pre = test_state(Rect::new(1273, -7, 3847, 1447));
+        pre.visible_bounds = Rect::new(1280, 0, 3840, 1440);
+        pre.has_title_bar = true;
+
+        assert_eq!(snapped_zone_target(Some(&pre), &detected, &monitor), None);
+        pre.zone_snapped = true;
+        assert_eq!(snapped_zone_target(Some(&pre), &detected, &monitor), Some(Rect::new(1280, 0, 3840, 1440)));
+
+        let other_monitor = Rect::new(-1920, 0, 0, 1080);
+        assert_eq!(snapped_zone_target(Some(&pre), &detected, &other_monitor), None);
+
+        let mut maximized = pre.clone();
+        maximized.show_state = ShowState::Maximized;
+        assert_eq!(snapped_zone_target(Some(&maximized), &detected, &monitor), None);
+
+        assert_eq!(snapped_zone_target(None, &detected, &monitor), None);
+    }
+
+    #[test]
+    fn companions_keep_their_relative_spot_in_the_zone() {
+        let fullscreen = Rect::new(0, 0, 5120, 1440);
+        let zone = Rect::new(0, 0, 2560, 1440);
+
+        // Bottom-right controls on the monitor land bottom-right in the zone, same size.
+        let controls = Rect::from_xywh(3400, 1300, 1400, 80);
+        let placed = map_companion(controls, fullscreen, zone).unwrap();
+        assert_eq!((placed.width(), placed.height()), (1400, 80));
+        assert!(zone.contains_rect(&placed));
+        assert_eq!(placed.bottom, 1380);
+        assert_eq!(placed.right, 2560);
+
+        // Centred on the monitor → centred in the zone.
+        let dialog = Rect::from_xywh(2260, 520, 600, 400);
+        assert_eq!(map_companion(dialog, fullscreen, zone), Some(Rect::from_xywh(980, 520, 600, 400)));
+        let right_half = Rect::from_xywh(3540, 520, 600, 400);
+        // Centre at 75% of the monitor → centre at 75% of the zone (1920).
+        assert_eq!(map_companion(right_half, fullscreen, zone).unwrap().left, 1620);
+
+        // Already in the zone, or on another monitor: left alone.
+        assert_eq!(map_companion(Rect::from_xywh(100, 100, 300, 200), fullscreen, zone), None);
+        assert_eq!(map_companion(Rect::from_xywh(-1500, 100, 300, 200), fullscreen, zone), None);
+
+        // Wider than the zone: pinned to the zone's left edge.
+        let wide = Rect::from_xywh(2800, 1300, 3000, 80);
+        assert_eq!(map_companion(wide, fullscreen, zone).unwrap().left, 0);
     }
 
     #[test]

@@ -74,6 +74,10 @@ pub struct WindowState {
     pub style: NativeStyle,
     pub monitor: Option<MonitorId>,
     pub dpi: u32,
+    /// Snapped into a zone by an external layout manager (PowerToys FancyZones). Its visible
+    /// rect is then that zone.
+    #[serde(default)]
+    pub zone_snapped: bool,
 }
 
 impl WindowState {

@@ -52,6 +52,25 @@ by design; measure) · 18. Generic structure ✅
   not `\\.\DISPLAYn`.
 - **Invisible borders.** Zone targets are visible rects; framed windows are expanded by their DWM
   invisible-border insets so there is no gap.
+- **Companion panels** 🧪. Apps place fullscreen panels (VLC's fullscreen controls, dialogs)
+  against their own fullscreen rect, i.e. the monitor, so they land outside the zone. While a
+  window is constrained, any window of the same process that is owned by it, or is borderless,
+  is moved to the same relative spot in the zone (centre mapped, size kept, clamped inside).
+  Panels whose centre is already in the zone (menus, browser bubbles anchored to the window)
+  and framed unowned windows (a second browser window) are left alone. Each panel is placed
+  when it shows (and again when the app re-shows it). A move while it stays visible counts as
+  the user dragging it (VLC drags its panels itself, so there is no system move loop to see),
+  and it is left there until that fullscreen ends; the next fullscreen places it again. If an
+  app repositions a visible panel on its own, that is mistaken for a user drag. Panels appear
+  at the app's position for a moment before the move, like the fullscreen window itself.
+- **FancyZones.** A window snapped by PowerToys FancyZones carries the `FancyZones_zones` /
+  `FancyZones_zones_max128` window properties (zone index bitmask), which persist through
+  fullscreen. FancyZones sizes the window's visible frame to the zone, so when a rule's
+  "Use FancyZones zone" option is on (default), the pre-fullscreen visible rect is the target.
+  We read the property only; FancyZones layouts are not parsed. Falls back to the rule's zone
+  when the window was maximized, snapped on another monitor, or seen only after it went
+  fullscreen. **Observed (2026-09):** property readable cross-process; LibreWolf, VLC, and
+  Cursor snapped at a (1280, 10) 2560×1345 zone.
 
 ## Known limitations / open questions
 
@@ -77,6 +96,13 @@ by design; measure) · 18. Generic structure ✅
 2. Multi-monitor + negative coordinates + mixed DPI.
 3. Measure idle CPU; review `EVENT_OBJECT_LOCATIONCHANGE` volume.
 4. Tray icon + close-to-tray 🧪 (Exit on the tray menu quits; autostart still open).
-5. Hide the one-frame real-fullscreen flash 🧪 (immediate apply + DWM cloak across the zone move).
-6. Then post-MVP: generic rules UI (class/title matchers), fixed size, aspect ratio, generic
+5. Real-fullscreen flash: shortened by applying immediately 🧪. Cross-process DWM cloak is denied
+   (verified), so removing it entirely needs an in-process hook DLL. Requested as an opt-in
+   setting (default off); not built yet (Chromium may block third-party DLLs; needs its own design).
+6. Animated transitions 🧪: fullscreen → zone and zone → pre-fullscreen window. 0.5 s pause, then
+   ease-in over the setting Direct / Fast 1 s / Normal 3 s / Slow 5 s. Steps are driven by the engine timer (~60 fps) and
+   read the window's rect each step; that per-step read is the only polling, and only during a
+   transition we started. A crash mid-shrink leaves the window where it was (journal won't match).
+   On exit, apps that restore their own window first (Chromium) jump before we can animate.
+7. Then post-MVP: generic rules UI (class/title matchers), fixed size, aspect ratio, generic
    borderless, always-on-top, profiles, macOS/Linux backends.

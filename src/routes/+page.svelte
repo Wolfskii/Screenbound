@@ -4,11 +4,12 @@
   import DiagnosticsPanel from "$lib/components/DiagnosticsPanel.svelte";
   import GroupsPanel from "$lib/components/GroupsPanel.svelte";
   import RulesPanel from "$lib/components/RulesPanel.svelte";
+  import SettingsPanel from "$lib/components/SettingsPanel.svelte";
   import ZonesPanel from "$lib/components/ZonesPanel.svelte";
   import { api } from "$lib/api";
   import { app } from "$lib/state.svelte";
 
-  type Tab = "zones" | "apps" | "groups" | "rules" | "diagnostics";
+  type Tab = "zones" | "apps" | "groups" | "rules" | "settings" | "diagnostics";
   let tab = $state<Tab>("zones");
 
   onMount(() => void app.init());
@@ -21,7 +22,7 @@
   <header>
     <div class="brand">ScreenBound</div>
     <nav>
-      {#each [["zones", "Zones"], ["apps", "Apps"], ["groups", "Groups"], ["rules", "Rules"], ["diagnostics", "Diagnostics"]] as [id, label] (id)}
+      {#each [["zones", "Zones"], ["apps", "Apps"], ["groups", "Groups"], ["rules", "Rules"], ["settings", "Settings"], ["diagnostics", "Diagnostics"]] as [id, label] (id)}
         <button class:active={tab === id} onclick={() => (tab = id as Tab)}>{label}</button>
       {/each}
     </nav>
@@ -63,6 +64,8 @@
       <GroupsPanel />
     {:else if tab === "rules"}
       <RulesPanel />
+    {:else if tab === "settings"}
+      <SettingsPanel />
     {:else}
       <DiagnosticsPanel />
     {/if}

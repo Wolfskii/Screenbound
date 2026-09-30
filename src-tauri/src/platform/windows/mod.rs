@@ -71,6 +71,22 @@ impl PlatformWindowManager for WindowsPlatform {
         window::exists(id)
     }
 
+    fn process_id(&self, id: WindowId) -> Option<u32> {
+        window::process_id(id)
+    }
+
+    fn owner(&self, id: WindowId) -> Option<WindowId> {
+        window::owner(id)
+    }
+
+    fn process_windows(&self, pid: u32) -> PlatformResult<Vec<WindowId>> {
+        window::process_windows(pid)
+    }
+
+    fn set_position(&self, id: WindowId, left: i32, top: i32) -> PlatformResult<()> {
+        window::set_position(id, left, top)
+    }
+
     fn identity(&self, id: WindowId) -> PlatformResult<WindowIdentity> {
         window::identity(id)
     }
@@ -170,7 +186,7 @@ mod desktop_tests {
         for id in windows {
             let (Ok(ident), Ok(state)) = (p.identity(id), p.state(id)) else { continue };
             println!(
-                "{id} {:<20} {:<28} {:<40.40} {} vis={} max={:?} caption={} fs={}",
+                "{id} {:<20} {:<28} {:<40.40} {} vis={} max={:?} caption={} fs={} fancyzones={}",
                 ident.process_name,
                 ident.class_name,
                 ident.title,
@@ -178,8 +194,37 @@ mod desktop_tests {
                 state.visible_bounds,
                 state.show_state,
                 state.has_title_bar,
-                is_fullscreen_like(&state, &monitors)
+                is_fullscreen_like(&state, &monitors),
+                state.zone_snapped
             );
         }
+    }
+
+    /// Checks whether DWM lets this process cloak a window owned by another process.
+    /// Starts and closes its own `winver.exe`; never touches the user's windows.
+    #[test]
+    #[ignore = "requires an interactive Windows desktop"]
+    fn probe_cross_process_cloak() {
+        init_process();
+        let mut child = std::process::Command::new("winver.exe").spawn().expect("spawn winver");
+        let mut hwnd = None;
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            hwnd = window::owned_top_level(child.id());
+            if hwnd.is_some() {
+                break;
+            }
+        }
+        let result = hwnd.map(|h| {
+            let set = window::set_cloak(h, true);
+            let after = window::cloaked(h);
+            let clear = window::set_cloak(h, false);
+            (set, after, clear, window::cloaked(h))
+        });
+        let _ = child.kill();
+        let _ = child.wait();
+        let (set, cloaked_after_set, clear, cloaked_after_clear) = result.expect("winver window not found");
+        println!("cloak: {set:?} -> cloaked={cloaked_after_set}; uncloak: {clear:?} -> cloaked={cloaked_after_clear}");
+        assert!(!cloaked_after_clear, "window left cloaked");
     }
 }

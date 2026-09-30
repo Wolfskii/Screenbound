@@ -3,6 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::rules::{Action, Matcher, RuleScope, WindowRule};
+use super::transition::TransitionSpeed;
 use super::window::ChromeMode;
 use super::zone::{NormalizedRect, Zone, ZoneReference};
 
@@ -16,6 +17,9 @@ pub struct AppConfig {
     /// Global kill switch for all automatic window management.
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// How entering and leaving the zone is animated.
+    #[serde(default)]
+    pub transition: TransitionSpeed,
     pub zones: Vec<Zone>,
     pub rules: Vec<WindowRule>,
     /// Named groups apps can be placed in. A rule can target one or more of these.
@@ -63,6 +67,7 @@ impl Default for AppConfig {
         Self {
             version: CONFIG_VERSION,
             enabled: true,
+            transition: TransitionSpeed::default(),
             zones: vec![Zone {
                 id: "zone-left-75".into(),
                 name: "75% Left".into(),
@@ -79,6 +84,7 @@ impl Default for AppConfig {
                 actions: vec![Action::FullscreenZone {
                     zone_id: "zone-left-75".into(),
                     chrome: ChromeMode::Keep,
+                    use_snapped_zone: true,
                 }],
             }],
             groups: Vec::new(),
@@ -245,7 +251,11 @@ mod tests {
             enabled: true,
             matcher: Matcher::ProcessName("vlc.exe".into()),
             scope: None,
-            actions: vec![Action::FullscreenZone { zone_id: "missing".into(), chrome: ChromeMode::Keep }],
+            actions: vec![Action::FullscreenZone {
+                zone_id: "missing".into(),
+                chrome: ChromeMode::Keep,
+                use_snapped_zone: true,
+            }],
         });
         assert!(matches!(cfg.validated(), Err(ConfigError::Invalid(_))));
     }

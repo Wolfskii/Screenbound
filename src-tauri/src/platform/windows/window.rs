@@ -2,9 +2,7 @@ use std::ffi::c_void;
 
 use windows::core::{BOOL, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, SetLastError, FILETIME, HWND, LPARAM, RECT, WIN32_ERROR, WPARAM};
-use windows::Win32::Graphics::Dwm::{
-    DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
-};
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
 use windows::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONULL};
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::StationsAndDesktops::{
@@ -18,7 +16,7 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::Shell::{ITaskbarList2, TaskbarList};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetWindow, GetWindowLongPtrW, GetWindowPlacement, GetWindowRect,
+    EnumWindows, GetClassNameW, GetPropW, GetWindow, GetWindowLongPtrW, GetWindowPlacement, GetWindowRect,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsHungAppWindow, IsIconic,
     IsWindow, IsWindowVisible, IsZoomed, SetWindowLongPtrW, SetWindowPlacement, SetWindowPos,
     RegisterWindowMessageW, ShowWindow, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_NOTOPMOST, HWND_TOPMOST,
@@ -97,7 +95,8 @@ fn owner_pid(h: HWND) -> u32 {
     pid
 }
 
-pub(super) fn enumerate(own_pid: u32) -> PlatformResult<Vec<WindowId>> {
+/// Every top-level window, in z-order (topmost first).
+fn top_level_windows() -> PlatformResult<Vec<HWND>> {
     let mut all: Vec<HWND> = Vec::new();
     unsafe extern "system" fn collect(h: HWND, data: LPARAM) -> BOOL {
         let all = unsafe { &mut *(data.0 as *mut Vec<HWND>) };
@@ -106,8 +105,37 @@ pub(super) fn enumerate(own_pid: u32) -> PlatformResult<Vec<WindowId>> {
     }
     unsafe { EnumWindows(Some(collect), LPARAM(&mut all as *mut _ as isize)) }
         .map_err(|e| PlatformError::Native { op: "EnumWindows", code: e.code().0, message: e.message() })?;
+    Ok(all)
+}
 
-    Ok(all
+pub(super) fn process_id(id: WindowId) -> Option<u32> {
+    let h = ensure_exists(id).ok()?;
+    Some(owner_pid(h)).filter(|&pid| pid != 0)
+}
+
+pub(super) fn owner(id: WindowId) -> Option<WindowId> {
+    let h = ensure_exists(id).ok()?;
+    unsafe { GetWindow(h, GW_OWNER) }.ok().filter(|o| !o.is_invalid()).map(window_id)
+}
+
+pub(super) fn process_windows(pid: u32) -> PlatformResult<Vec<WindowId>> {
+    Ok(top_level_windows()?
+        .into_iter()
+        .filter(|&h| owner_pid(h) == pid)
+        .filter(|&h| unsafe { IsWindowVisible(h) }.as_bool())
+        .filter(|&h| !is_cloaked(h))
+        .map(window_id)
+        .collect())
+}
+
+pub(super) fn set_position(id: WindowId, left: i32, top: i32) -> PlatformResult<()> {
+    let h = ensure_responsive(id)?;
+    unsafe { SetWindowPos(h, None, left, top, 0, 0, BASE_POS_FLAGS | SWP_NOSIZE) }
+        .map_err(|e| window_error(id, "SetWindowPos(move)", e))
+}
+
+pub(super) fn enumerate(own_pid: u32) -> PlatformResult<Vec<WindowId>> {
+    Ok(top_level_windows()?
         .into_iter()
         .filter(|&h| unsafe { IsWindowVisible(h) }.as_bool())
         .filter(|&h| unsafe { GetWindow(h, GW_OWNER) }.map_or(true, |o| o.is_invalid()))
@@ -239,7 +267,17 @@ pub(super) fn state(id: WindowId, monitor_id: impl Fn(String) -> MonitorId) -> P
         style: NativeStyle { primary: u64::from(style), extended: u64::from(ex_style) },
         monitor,
         dpi: unsafe { GetDpiForWindow(h) },
+        zone_snapped: is_fancy_zones_snapped(h),
     })
+}
+
+/// PowerToys FancyZones stamps a snapped window's zone indices into these window properties
+/// and removes them when the window is dragged out (FancyZonesWindowProperties.cpp). The value
+/// is a bitmask, so only null means "not snapped".
+fn is_fancy_zones_snapped(h: HWND) -> bool {
+    [windows::core::w!("FancyZones_zones"), windows::core::w!("FancyZones_zones_max128")]
+        .into_iter()
+        .any(|name| !unsafe { GetPropW(h, name) }.0.is_null())
 }
 
 fn set_window_pos(id: WindowId, h: HWND, r: Rect, flags: SET_WINDOW_POS_FLAGS) -> PlatformResult<()> {
@@ -258,48 +296,39 @@ fn ensure_normal_show_state(h: HWND) {
 
 pub(super) fn set_bounds(id: WindowId, bounds: Rect) -> PlatformResult<()> {
     let h = ensure_responsive(id)?;
-    // Hide the window from the desktop while the rect changes, so the monitor-sized fullscreen
-    // frame is not presented before the zone rect. Drop uncloaks even if the move fails.
-    let _cloak = CloakGuard::hide_unless_already(h);
     ensure_normal_show_state(h);
     // Skipping WM_WINDOWPOSCHANGING stops apps (e.g. Chromium in fullscreen) from rewriting
     // the rect back to the monitor; they still get WM_WINDOWPOSCHANGED/WM_SIZE to relayout.
     set_window_pos(id, h, bounds, SWP_FRAMECHANGED | SWP_NOSENDCHANGING)
 }
 
-struct CloakGuard {
-    hwnd: HWND,
-    active: bool,
-}
-
-impl CloakGuard {
-    fn hide_unless_already(hwnd: HWND) -> Self {
-        if is_cloaked(hwnd) {
-            return Self { hwnd, active: false };
-        }
-        set_cloak(hwnd, true);
-        Self { hwnd, active: true }
-    }
-}
-
-impl Drop for CloakGuard {
-    fn drop(&mut self) {
-        if self.active {
-            set_cloak(self.hwnd, false);
-        }
-    }
-}
-
-fn set_cloak(hwnd: HWND, cloak: bool) {
+/// DWM rejects `DWMWA_CLOAK` on other processes' windows (E_ACCESSDENIED, verified by
+/// `probe_cross_process_cloak`), so this only backs that probe.
+#[cfg(test)]
+pub(super) fn set_cloak(hwnd: HWND, cloak: bool) -> windows::core::Result<()> {
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK};
     let value = u32::from(cloak);
-    let _ = unsafe {
+    unsafe {
         DwmSetWindowAttribute(
             hwnd,
             DWMWA_CLOAK,
             &value as *const u32 as *const _,
             std::mem::size_of::<u32>() as u32,
         )
-    };
+    }
+}
+
+#[cfg(test)]
+pub(super) fn cloaked(hwnd: HWND) -> bool {
+    is_cloaked(hwnd)
+}
+
+#[cfg(test)]
+pub(super) fn owned_top_level(pid: u32) -> Option<HWND> {
+    top_level_windows()
+        .ok()?
+        .into_iter()
+        .find(|&h| owner_pid(h) == pid && unsafe { IsWindowVisible(h) }.as_bool())
 }
 
 /// The shell keeps the taskbar above a window that no longer covers the monitor until that

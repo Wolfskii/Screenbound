@@ -69,6 +69,18 @@ pub trait PlatformWindowManager: Send + Sync {
     fn enumerate_windows(&self) -> PlatformResult<Vec<WindowId>>;
 
     fn exists(&self, window: WindowId) -> bool;
+
+    /// Owning process id, without opening the process.
+    fn process_id(&self, window: WindowId) -> Option<u32>;
+
+    /// The window that owns `window` (dialogs, tool panels), if any.
+    fn owner(&self, window: WindowId) -> Option<WindowId>;
+
+    /// Visible, non-cloaked top-level windows of one process, including owned panels.
+    fn process_windows(&self, pid: u32) -> PlatformResult<Vec<WindowId>>;
+
+    /// Moves without resizing, activating, or changing z-order.
+    fn set_position(&self, window: WindowId, left: i32, top: i32) -> PlatformResult<()>;
     fn identity(&self, window: WindowId) -> PlatformResult<WindowIdentity>;
     fn state(&self, window: WindowId) -> PlatformResult<WindowState>;
     fn is_hung(&self, window: WindowId) -> bool;

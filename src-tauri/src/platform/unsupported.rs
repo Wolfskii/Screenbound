@@ -15,6 +15,18 @@ impl PlatformWindowManager for UnsupportedPlatform {
     fn exists(&self, _: WindowId) -> bool {
         false
     }
+    fn process_id(&self, _: WindowId) -> Option<u32> {
+        None
+    }
+    fn owner(&self, _: WindowId) -> Option<WindowId> {
+        None
+    }
+    fn process_windows(&self, _: u32) -> PlatformResult<Vec<WindowId>> {
+        Err(PlatformError::Unsupported)
+    }
+    fn set_position(&self, _: WindowId, _: i32, _: i32) -> PlatformResult<()> {
+        Err(PlatformError::Unsupported)
+    }
     fn identity(&self, _: WindowId) -> PlatformResult<WindowIdentity> {
         Err(PlatformError::Unsupported)
     }

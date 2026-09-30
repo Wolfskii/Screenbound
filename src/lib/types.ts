@@ -45,7 +45,13 @@ export type Matcher =
     | { type: "any"; value: Matcher[] }
     | { type: "all"; value: Matcher[] };
 
-export type Action = { type: "fullscreenZone"; zoneId: string; chrome: ChromeMode };
+export type Action = {
+    type: "fullscreenZone";
+    zoneId: string;
+    chrome: ChromeMode;
+    /** Fill the FancyZones zone a snapped window was in. Omitted on older rules, which the engine treats as true. */
+    useSnappedZone?: boolean;
+};
 
 export type RuleScope =
     | { type: "all" }
@@ -76,9 +82,13 @@ export interface KnownApp {
     groupId?: string | null;
 }
 
+export type TransitionSpeed = "instant" | "fast" | "normal" | "slow";
+
 export interface AppConfig {
     version: number;
     enabled: boolean;
+    /** Omitted in configs written before this field existed; the engine treats that as "normal". */
+    transition?: TransitionSpeed;
     zones: Zone[];
     rules: WindowRule[];
     groups?: AppGroup[];
@@ -101,6 +111,8 @@ export interface WindowState {
     style: { primary: number; extended: number };
     monitor: string | null;
     dpi: number;
+    /** Snapped into a PowerToys FancyZones zone. */
+    zoneSnapped?: boolean;
 }
 
 export interface WindowIdentity {

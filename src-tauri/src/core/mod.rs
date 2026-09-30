@@ -5,5 +5,6 @@ pub mod fullscreen;
 pub mod geometry;
 pub mod monitor;
 pub mod rules;
+pub mod transition;
 pub mod window;
 pub mod zone;
