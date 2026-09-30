@@ -1,5 +1,9 @@
 # ScreenBound
 
+<p align="center">
+  <img src="assets/logo.webp" alt="ScreenBound" width="160" />
+</p>
+
 Make fullscreen mean fullscreen *inside the part of the screen you choose*.
 
 ScreenBound watches for applications entering fullscreen and constrains their real native window
