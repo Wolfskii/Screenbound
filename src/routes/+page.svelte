@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import AppsPanel from "$lib/components/AppsPanel.svelte";
   import DiagnosticsPanel from "$lib/components/DiagnosticsPanel.svelte";
   import RulesPanel from "$lib/components/RulesPanel.svelte";
   import ZonesPanel from "$lib/components/ZonesPanel.svelte";
   import { api } from "$lib/api";
   import { app } from "$lib/state.svelte";
 
-  type Tab = "zones" | "rules" | "diagnostics";
+  type Tab = "zones" | "apps" | "rules" | "diagnostics";
   let tab = $state<Tab>("zones");
 
   onMount(() => void app.init());
@@ -19,7 +20,7 @@
   <header>
     <div class="brand">ScreenBound</div>
     <nav>
-      {#each [["zones", "Zones"], ["rules", "Rules"], ["diagnostics", "Diagnostics"]] as [id, label] (id)}
+      {#each [["zones", "Zones"], ["apps", "Apps"], ["rules", "Rules"], ["diagnostics", "Diagnostics"]] as [id, label] (id)}
         <button class:active={tab === id} onclick={() => (tab = id as Tab)}>{label}</button>
       {/each}
     </nav>
@@ -55,6 +56,8 @@
       <p class="dim">Loading…</p>
     {:else if tab === "zones"}
       <ZonesPanel />
+    {:else if tab === "apps"}
+      <AppsPanel />
     {:else if tab === "rules"}
       <RulesPanel />
     {:else}
