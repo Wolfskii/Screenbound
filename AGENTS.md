@@ -56,7 +56,7 @@ recorded in PLAN.md / [docs/fullscreen-research.md](docs/fullscreen-research.md)
 | Lint | `task lint` |
 | Frontend type check | `task check` |
 | Typecheck, test, and lint | `task ci` |
-| Release build | `task release` |
+| Release build (NSIS + MSI + portable → `dist/`) | `task release` |
 | Install that release for the current user | `task deploy` |
 
 `scripts/probe-resize.ps1 -ProcessId <pid> [-NoSendChanging]` resizes one process's main window and

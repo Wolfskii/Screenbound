@@ -1,7 +1,7 @@
 version: "3"
 
-# Windows desktop app. `dev` is the local loop; `release` builds the installer;
-# `deploy` installs that build for the current user.
+# Windows desktop app. `dev` is the local loop; `release` builds NSIS + MSI +
+# portable artifacts into dist/; `deploy` installs the NSIS build for the current user.
 
 tasks:
   default:
@@ -76,13 +76,15 @@ tasks:
 
   release:
     aliases: [build]
-    desc: Production build and Windows installer
+    desc: Production build — NSIS + MSI installers and a portable exe in dist/
     deps: [install]
     cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-screenbound.ps1
       - npm run tauri build
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-artifacts.ps1
 
   deploy:
-    desc: Build the release installer and install it for the current user
+    desc: Build release artifacts and install the NSIS setup for the current user
     cmds:
       - task: release
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command "$setup = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if (-not $setup) { throw 'NSIS installer not found under src-tauri/target/release/bundle/nsis' }; Write-Host ('Installing ' + $setup.FullName); $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru; if ($p.ExitCode -ne 0) { exit $p.ExitCode }"
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "$setup = Get-ChildItem -Path 'dist' -Filter '*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if (-not $setup) { throw 'NSIS installer not found under dist/' }; Write-Host ('Installing ' + $setup.FullName); $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru; if ($p.ExitCode -ne 0) { exit $p.ExitCode }"

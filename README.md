@@ -22,6 +22,12 @@ task dev
 
 `task --list` shows the rest (`task test`, `task release`, `task deploy`, …).
 
+`task release` writes three artifacts into `dist/`:
+
+- `ScreenBound_*_x64-setup.exe` — NSIS installer
+- `ScreenBound_*_x64.msi` — MSI installer
+- `ScreenBound_*_x64-portable.exe` — no-install single binary (needs WebView2)
+
 Defaults: zone "75% Left" and a rule for every app you turn on. The **Groups** tab names groups and gives them a color and icon; its switch turns that group on or off. The **Apps** tab turns individual apps on and assigns them to a group. A rule can target all apps that are on, specific groups, or specific apps. Settings stay in `%APPDATA%\com.screenbound.app` across reinstalls unless uninstall **Delete app data** is checked.
 
 ## Docs
